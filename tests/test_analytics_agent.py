@@ -37,7 +37,8 @@ def test_sync_writes_only_table_metadata_for_the_raw_schema(tmp_path):
     agent.sync(project)
 
     tables = project / "databases" / "type=duckdb" / "database=compass" / "schema=main"
-    assert sorted(p.name for p in tables.iterdir()) == ["table=bookings", "table=destinations", "table=policies"]
+    # Every base table, and none of the Metric layer's metric_* views or catalogue.
+    assert sorted(p.name for p in tables.iterdir()) == sorted(f"table={t}" for t in warehouse.TABLES)
     for table in tables.iterdir():
         assert sorted(p.name for p in table.iterdir()) == ["annotations.md", "columns.md", "preview.md"]
         assert manual_body((table / "annotations.md").read_text()) == ""

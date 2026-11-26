@@ -5,6 +5,7 @@ These tests may read the generator's configuration, as ADR 0002 allows.
 
 from datetime import date
 
+import pandas as pd
 import pytest
 
 from compass import metrics, warehouse
@@ -245,3 +246,55 @@ def test_2025_ae_is_about_1_by_destination_region(full_con):
     assert set(ae.index) == {"us_atlantic", "gulf_coast", "caribbean"}
     assert ae.ae.between(0.9, 1.1).all()
     assert ae.ae_on_incurred.between(0.9, 1.1).all()
+
+
+@pytest.fixture(scope="module")
+def hurricane_claims():
+    """Every claim of the September 2026 Gulf Coast hurricane, reported or not, regenerated from its stream."""
+    from compass.generator import STREAM_HURRICANE, UNDERWRITING_YEARS, rng_for
+    from compass.generator.hurricane import generate_hurricane_claims
+    from compass.generator.truth import HURRICANE
+
+    seed = warehouse.DEFAULT_SEED
+    book = generate_book(seed)
+    frames = []
+    for year in UNDERWRITING_YEARS:
+        frames.append(generate_hurricane_claims(rng_for(seed, year, STREAM_HURRICANE), year, book["bookings"],
+                                                book["policies"], book["destinations"], HURRICANE,
+                                                date(2030, 12, 31)))
+    return pd.concat(frames, ignore_index=True)
+
+
+def test_the_gulf_coast_hurricane_claims_are_largely_unreported_at_the_valuation_date(full_con, hurricane_claims):
+    from compass.generator.truth import HURRICANE
+
+    reported = hurricane_claims[hurricane_claims.report_date <= VALUATION_DATE]
+
+    assert len(hurricane_claims) > 100  # a material event
+    assert HURRICANE.landfall.month == 9 and 10 <= HURRICANE.landfall.day <= 20  # mid-September 2026
+    assert len(reported) / len(hurricane_claims) < 0.25  # largely unreported at the Valuation date
+    assert reported.paid_amount.sum() / hurricane_claims.paid_amount.sum() < 0.25
+    # The reported ones are in the warehouse, on Gulf Coast Policies, among the ordinary claims.
+    gulf = full_con.sql(f"""
+        SELECT policy_id, loss_date, paid_amount FROM metric_claims
+        WHERE destination_region = 'gulf_coast' AND loss_date = DATE '{HURRICANE.landfall}'
+    """).df()
+    merged = reported.merge(gulf, on=["policy_id", "paid_amount"], how="left", indicator=True)
+    assert (merged["_merge"] == "both").all()
+
+
+def test_the_hurricane_loading_covers_the_unreported_event_on_gulf_coast_2026(full_con, hurricane_claims):
+    # The loading is an Expert-judgment estimate (calibrated on other seeds), so only roughly right.
+    unreported = hurricane_claims[hurricane_claims.report_date > VALUATION_DATE]
+    loaded = metrics.query(full_con, ["ultimate", "ultimate_with_loading", "ultimate_claim_count",
+                                      "ultimate_claim_count_with_loading"],
+                           by=["underwriting_year", "destination_region"]).set_index(
+        ["underwriting_year", "destination_region"])
+
+    gulf = loaded.loc[(2026, "gulf_coast")]
+    assert gulf.ultimate_with_loading - gulf.ultimate == pytest.approx(unreported.paid_amount.sum(), rel=0.3)
+    assert (gulf.ultimate_claim_count_with_loading - gulf.ultimate_claim_count
+            == pytest.approx(len(unreported), rel=0.3))
+    # Nowhere else: the other regions and 2025 (all returned by the event) carry no loading.
+    others = loaded.drop(index=(2026, "gulf_coast"))
+    assert list(others.ultimate_with_loading) == pytest.approx(list(others.ultimate))

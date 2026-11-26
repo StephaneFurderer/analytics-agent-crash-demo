@@ -88,6 +88,13 @@ DEVELOPMENT_FACTORS = [
     {"maturity_months": 18, "count_factor": 1.0, "amount_factor": 1.0},
 ]
 
+# A tiny hurricane loading (Expert judgment): a made-up Gulf Coast storm on 2 July 2025, when only B2-H
+# (Galveston, trip cost 500) is at risk there. Loading per Policy at risk: 0.5 claims and 0.4 of its trip cost.
+HURRICANE_LOADING = [
+    {"event": "tiny storm", "destination_region": "gulf_coast", "event_date": date(2025, 7, 2),
+     "count_per_policy": 0.5, "amount_per_trip_cost": 0.4},
+]
+
 
 @pytest.fixture(scope="session")
 def full_warehouse(tmp_path_factory):
@@ -106,7 +113,8 @@ def full_con(full_warehouse):
 def tiny_book(tmp_path):
     path = tmp_path / "tiny.duckdb"
     warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES, claims=CLAIMS,
-                    pricing_coefficients=PRICING_COEFFICIENTS, development_factors=DEVELOPMENT_FACTORS)
+                    pricing_coefficients=PRICING_COEFFICIENTS, development_factors=DEVELOPMENT_FACTORS,
+                    hurricane_loading=HURRICANE_LOADING)
     con = warehouse.connect(path)
     yield con
     con.close()

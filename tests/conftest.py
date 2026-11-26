@@ -46,6 +46,19 @@ POLICIES = [
      "pure_premium": 30.00, "commercial_premium": 33.30},
 ]
 
+# A tiny Pricing basis. Terms not listed (segment_baseline, state_TX, month_7, ...) are reference levels.
+PRICING_COEFFICIENTS = [
+    {"model": "tiny pricing GLM", "component": c, "term": t, "coefficient": v}
+    for c, t, v in [
+        ("frequency", "intercept", -3.0), ("frequency", "age", 0.1), ("frequency", "log_trip_cost", 0.2),
+        ("frequency", "product_flight", 0.3), ("frequency", "segment_holiday_travelers", 0.4),
+        ("frequency", "state_CA", 0.5), ("frequency", "month_1", 0.6),
+        ("severity", "intercept", 4.0), ("severity", "age", 0.05), ("severity", "log_trip_cost", 0.3),
+        ("severity", "product_flight", -0.2), ("severity", "post_departure", -0.5),
+        ("premium", "post_departure_share", 0.4), ("premium", "expense_load", 1.1),
+    ]
+]
+
 
 @pytest.fixture(scope="session")
 def full_warehouse(tmp_path_factory):
@@ -63,7 +76,8 @@ def full_con(full_warehouse):
 @pytest.fixture
 def tiny_book(tmp_path):
     path = tmp_path / "tiny.duckdb"
-    warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES)
+    warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES,
+                    pricing_coefficients=PRICING_COEFFICIENTS)
     con = warehouse.connect(path)
     yield con
     con.close()

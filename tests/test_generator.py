@@ -178,28 +178,46 @@ def test_2025_ae_is_about_1_across_segments(full_con):
     assert by_segment.ae.between(0.9, 1.1).all()
 
 
-def test_2025_ibnr_matches_the_claims_that_occurred_but_were_not_reported(full_warehouse):
-    # Regenerate 2025 with every claim reported (a far later Valuation date) and count the ones
-    # that occurred by the real Valuation date but were reported after it.
-    from compass.generator import STREAM_CLAIMS, generate_claims, rng_for
+@pytest.fixture(scope="module")
+def late_claims():
+    """Per Underwriting year, the claims that occurred by the Valuation date but were reported after it.
+
+    Regenerated with every claim reported (a far later Valuation date), from the same random streams.
+    """
+    from compass.generator import STREAM_CLAIMS, UNDERWRITING_YEARS, generate_claims, rng_for
     from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
 
-    book = generate_book(warehouse.DEFAULT_SEED)
-    every = generate_claims(rng_for(warehouse.DEFAULT_SEED, 2025, STREAM_CLAIMS), 2025, book["bookings"],
-                            book["policies"], book["destinations"], TRUE_MODEL[2025], CLAIM_PROCESS,
-                            date(2030, 12, 31))
-    every = every[every.policy_id.str.startswith("B2025")]
-    late = every[(every.loss_date <= VALUATION_DATE) & (every.report_date > VALUATION_DATE)]
+    seed = warehouse.DEFAULT_SEED
+    book = generate_book(seed)
+    late = {}
+    for year in UNDERWRITING_YEARS:
+        every = generate_claims(rng_for(seed, year, STREAM_CLAIMS), year, book["bookings"], book["policies"],
+                                book["destinations"], TRUE_MODEL[year], CLAIM_PROCESS, date(2030, 12, 31))
+        every = every[every.policy_id.str.startswith(f"B{year}")]
+        late[year] = every[(every.loss_date <= VALUATION_DATE) & (every.report_date > VALUATION_DATE)]
+    return late
 
-    con = warehouse.connect(full_warehouse)
-    try:
-        ibnr = metrics.query(con, ["ibnr_claim_count", "ibnr"], where="underwriting_year = 2025").iloc[0]
-    finally:
-        con.close()
+
+def _ibnr(con, year):
+    return metrics.query(con, ["ibnr_claim_count", "ibnr"], where=f"underwriting_year = {year}").iloc[0]
+
+
+def test_2025_ibnr_matches_the_claims_that_occurred_but_were_not_reported(full_con, late_claims):
+    late, ibnr = late_claims[2025], _ibnr(full_con, 2025)
 
     assert len(late) > 5  # 2025 is mature: few claims are still unreported
     assert ibnr.ibnr_claim_count == pytest.approx(len(late), rel=0.5)
     assert ibnr.ibnr == pytest.approx(late.paid_amount.sum(), rel=0.5)
+
+
+def test_2026_ibnr_matches_the_claims_that_occurred_but_were_not_reported(full_con, late_claims):
+    # 2026 is immature, so IBNR is material; the standard factors carry no Drift but are level-free,
+    # so they still develop the drifted Incurred to about the right amount.
+    late, ibnr = late_claims[2026], _ibnr(full_con, 2026)
+
+    assert len(late) > 300
+    assert ibnr.ibnr_claim_count == pytest.approx(len(late), rel=0.2)
+    assert ibnr.ibnr == pytest.approx(late.paid_amount.sum(), rel=0.2)
 
 
 def _ae_by_region(con, year):
@@ -218,3 +236,12 @@ def test_2026_drift_is_clear_on_ultimate_for_caribbean_and_gulf_coast_and_partly
         assert ae.loc[region, "ae_on_incurred"] < ae.loc[region, "ae"] - 0.1, region
     # The rest of the book is still priced right.
     assert ae.loc["us_atlantic", "ae"] == pytest.approx(1.0, abs=0.1)
+
+
+def test_2025_ae_is_about_1_by_destination_region(full_con):
+    # Before the Drift the pricing worked everywhere, on Ultimate and (2025 being mature) on Incurred.
+    ae = _ae_by_region(full_con, 2025)
+
+    assert set(ae.index) == {"us_atlantic", "gulf_coast", "caribbean"}
+    assert ae.ae.between(0.9, 1.1).all()
+    assert ae.ae_on_incurred.between(0.9, 1.1).all()

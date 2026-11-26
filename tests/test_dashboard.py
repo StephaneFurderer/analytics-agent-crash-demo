@@ -103,3 +103,15 @@ def test_performance_tab_shows_ultimate_and_ae_tiles(app, full_con):
 
     assert shown["Ultimate"] == f"${expected.ultimate:,.0f}"
     assert shown["A/E"] == f"{expected.ae:.3f}"
+
+
+def test_performance_tab_shows_2026_ae_above_1_by_underwriting_year(app):
+    # The Drift is visible in aggregate, but the dashboard can't say where it comes from.
+    shown = [frame.value for frame in app.dataframe
+             if "Underwriting year" in frame.value.columns and "A/E band" in frame.value.columns]
+
+    assert len(shown) == 1
+    by_year = shown[0].set_index(shown[0]["Underwriting year"].astype(str).str.replace(",", ""))
+    assert float(by_year.loc["2025", "A/E"]) == pytest.approx(1.0, abs=0.05)
+    assert float(by_year.loc["2026", "A/E"]) > 1.15
+    assert by_year.loc["2026", "A/E band"] != by_year.loc["2025", "A/E band"]

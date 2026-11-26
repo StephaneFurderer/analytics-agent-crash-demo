@@ -27,7 +27,7 @@ from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
 from compass.generator.pricing import PRICING_GLM_2025, coefficients_frame
 
 VALUATION_DATE = date(2026, 9, 30)  # must match valuation_date() in metrics/sql/05_valuation.sql
-UNDERWRITING_YEARS = (2025,)
+UNDERWRITING_YEARS = (2025, 2026)
 
 # Stream ids: append new ones, never renumber.
 STREAM_BOOKINGS = 1

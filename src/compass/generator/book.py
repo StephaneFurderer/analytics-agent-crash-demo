@@ -42,8 +42,12 @@ def generate_year(rng: np.random.Generator, year: int, purchased_until: date,
 
 
 def _segment_bookings(rng, segment, n, year, purchased_until, destinations) -> pd.DataFrame:
+    """The segment's `n` bookings for the whole year, keeping those purchased by `purchased_until`.
+
+    A year cut short by the Valuation date has only the bookings sold so far.
+    """
     start = np.datetime64(f"{year}-01-01")
-    until = np.datetime64(purchased_until)
+    until = np.datetime64(f"{year}-12-31")
     chunks, have = [], 0
     while have < n:
         cand = _draw_trips(rng, segment, 2 * n, start)
@@ -62,7 +66,7 @@ def _segment_bookings(rng, segment, n, year, purchased_until, destinations) -> p
         destination_id[mask] = rng.choice(ids, size=int(mask.sum()))
 
     state_p = np.array(pf.STATE_WEIGHTS[segment])
-    return pd.DataFrame({
+    frame = pd.DataFrame({
         "segment": segment,
         "destination_id": destination_id,
         "age": _ages(rng, segment, n),
@@ -73,6 +77,7 @@ def _segment_bookings(rng, segment, n, year, purchased_until, destinations) -> p
         "return_date": trips["return_date"].astype("datetime64[D]").astype(object),
         "num_nights": trips["num_nights"],
     })
+    return frame[trips["purchase_date"] <= np.datetime64(purchased_until)]
 
 
 def _draw_trips(rng, segment, n, start) -> dict[str, np.ndarray]:

@@ -1,0 +1,5 @@
+# Files the Analytics agent must not read. The Benchmark questions and their reference SQL
+# live in tests/ (nao test reads them itself); the agent seeing them would leak the answers.
+tests/
+templates/
+*.j2

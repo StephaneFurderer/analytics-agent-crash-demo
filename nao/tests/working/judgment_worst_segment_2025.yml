@@ -1,0 +1,12 @@
+# Seed question (ticket #11). Reference answer: the segment with the highest A/E
+# (Ultimate over earned Pure premium) in the Metric layer.
+name: judgment_worst_segment_2025
+prompt: Which customer segment is performing worst against pricing in underwriting year 2025?
+tags: [tier:judgment, set:working]
+sql: |
+  SELECT segment
+  FROM metric_experience
+  WHERE underwriting_year = 2025
+  GROUP BY segment
+  ORDER BY sum(incurred * amount_factor) / sum(pure_premium * earned_share) DESC
+  LIMIT 1

@@ -31,15 +31,30 @@ def standard_development_factors() -> pd.DataFrame:
         return pd.read_csv(f, comment="#")
 
 
-def apply(con: duckdb.DuckDBPyConnection, development_factors: pd.DataFrame | None = None) -> None:
+def standard_hurricane_loading() -> pd.DataFrame:
+    """The hurricane loading: version-controlled Expert-judgment assumption data, separate from the factors.
+
+    One row per event: event, destination_region, event_date, and the loading per Policy at risk in that
+    region on that date: count_per_policy (claims) and amount_per_trip_cost (losses / trip cost).
+    """
+    with resources.files("compass.assumptions").joinpath("hurricane_loading.csv").open() as f:
+        return pd.read_csv(f, comment="#", parse_dates=["event_date"])
+
+
+def apply(con: duckdb.DuckDBPyConnection, development_factors: pd.DataFrame | None = None,
+          hurricane_loading: pd.DataFrame | None = None) -> None:
     """Create the Metric layer's views and catalogue on a warehouse connection.
 
-    The assumption data (`development_factors`, default `standard_development_factors()`) is
-    exposed to the SQL files as the relation `_development_factors`.
+    The assumption data (`development_factors`, default `standard_development_factors()`, and
+    `hurricane_loading`, default `standard_hurricane_loading()`) is exposed to the SQL files as the
+    relations `_development_factors` and `_hurricane_loading`.
     """
     if development_factors is None:
         development_factors = standard_development_factors()
+    if hurricane_loading is None:
+        hurricane_loading = standard_hurricane_loading()
     con.register("_development_factors", development_factors)
+    con.register("_hurricane_loading", hurricane_loading)
     try:
         sql_dir = resources.files("compass.metrics").joinpath("sql")
         for sql_file in sorted(sql_dir.iterdir(), key=lambda f: f.name):
@@ -47,6 +62,7 @@ def apply(con: duckdb.DuckDBPyConnection, development_factors: pd.DataFrame | No
                 con.execute(sql_file.read_text())
     finally:
         con.unregister("_development_factors")
+        con.unregister("_hurricane_loading")
 
 
 def definitions(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
@@ -62,6 +78,12 @@ def pricing_basis(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 def development_factors(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """The development factors this warehouse uses: maturity_months, count_factor, amount_factor."""
     return con.sql("SELECT * FROM metric_development_factors ORDER BY maturity_months").df()
+
+
+def hurricane_loading(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """The hurricane loading this warehouse uses: event, destination_region, event_date, count_per_policy,
+    amount_per_trip_cost."""
+    return con.sql("SELECT * FROM metric_hurricane_loading ORDER BY event_date, event").df()
 
 
 def ae_bands(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:

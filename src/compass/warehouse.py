@@ -33,11 +33,12 @@ TABLES = ("destinations", "bookings", "policies", "claims", "pricing_coefficient
 Rows = pd.DataFrame | Iterable[Mapping]
 
 
-def write(path: str | Path, development_factors: Rows | None = None, **tables: Rows) -> Path:
+def write(path: str | Path, development_factors: Rows | None = None, hurricane_loading: Rows | None = None,
+          **tables: Rows) -> Path:
     """Create a fresh warehouse at `path` from base-table rows, then apply the Metric layer.
 
-    `development_factors` overrides the standard development factors the Metric layer reads
-    (default: the version-controlled `compass/assumptions/development_factors.csv`).
+    `development_factors` and `hurricane_loading` override the Expert-judgment assumptions the Metric
+    layer reads (default: the version-controlled CSVs in `compass/assumptions/`).
     """
     unknown = set(tables) - set(TABLES)
     if unknown:
@@ -57,7 +58,8 @@ def write(path: str | Path, development_factors: Rows | None = None, **tables: R
                 con.register("_rows", frame)
                 con.execute(f"INSERT INTO {name} ({columns}) SELECT {columns} FROM _rows")
                 con.unregister("_rows")
-        metrics.apply(con, None if development_factors is None else _frame(development_factors))
+        metrics.apply(con, None if development_factors is None else _frame(development_factors),
+                      None if hurricane_loading is None else _frame(hurricane_loading))
     finally:
         con.close()
     return path

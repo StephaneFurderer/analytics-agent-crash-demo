@@ -1,0 +1,10 @@
+# Hurricane loading: Expert-judgment estimate of an event's claims not yet in Ultimate. Kept separate from the
+# standard development factors (development_factors.csv); edit by hand and commit. The Metric layer reads this file
+# and applies it only in the *_with_loading metrics: Ultimate, A/E and Loss ratio stay unloaded by default.
+# One row per event. A Policy is at risk on event_date if purchased on or before it and returning on or after it.
+#   count_per_policy: expected claims per Policy at risk in destination_region on event_date
+#   amount_per_trip_cost: expected losses per unit of trip cost at risk there
+# Both are net of the event claims already reported (and developed by the standard factors) at the Valuation date.
+# First selection: calibrated offline by `python -m compass.generator.hurricane_loading`.
+event,destination_region,event_date,count_per_policy,amount_per_trip_cost
+September 2026 Gulf Coast hurricane,gulf_coast,2026-09-16,0.0436,0.0116

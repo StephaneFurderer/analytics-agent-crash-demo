@@ -281,3 +281,20 @@ def test_the_gulf_coast_hurricane_claims_are_largely_unreported_at_the_valuation
     """).df()
     merged = reported.merge(gulf, on=["policy_id", "paid_amount"], how="left", indicator=True)
     assert (merged["_merge"] == "both").all()
+
+
+def test_the_hurricane_loading_covers_the_unreported_event_on_gulf_coast_2026(full_con, hurricane_claims):
+    # The loading is an Expert-judgment estimate (calibrated on other seeds), so only roughly right.
+    unreported = hurricane_claims[hurricane_claims.report_date > VALUATION_DATE]
+    loaded = metrics.query(full_con, ["ultimate", "ultimate_with_loading", "ultimate_claim_count",
+                                      "ultimate_claim_count_with_loading"],
+                           by=["underwriting_year", "destination_region"]).set_index(
+        ["underwriting_year", "destination_region"])
+
+    gulf = loaded.loc[(2026, "gulf_coast")]
+    assert gulf.ultimate_with_loading - gulf.ultimate == pytest.approx(unreported.paid_amount.sum(), rel=0.3)
+    assert (gulf.ultimate_claim_count_with_loading - gulf.ultimate_claim_count
+            == pytest.approx(len(unreported), rel=0.3))
+    # Nowhere else: the other regions and 2025 (all returned by the event) carry no loading.
+    others = loaded.drop(index=(2026, "gulf_coast"))
+    assert list(others.ultimate_with_loading) == pytest.approx(list(others.ultimate))

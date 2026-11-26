@@ -68,3 +68,20 @@ INSERT INTO metric_definitions VALUES
      'development factors. Actual for A/E.'),
     ('ultimate_claim_count', 'Ultimate claims', 'metric_experience', 'sum(reported_claims * count_factor)', 'count',
      'Final number of claims once every claim has been reported: reported claims plus IBNR claims.');
+
+-- Ratios on Ultimate. Earned Policies = sum of earned shares. A/E is on the Pricing basis:
+-- its Expected is earned Pure premium.
+INSERT INTO metric_definitions VALUES
+    ('ultimate_frequency', 'Ultimate frequency', 'metric_experience',
+     'sum(reported_claims * count_factor) / sum(earned_share)', 'ratio',
+     'Ultimate claims per earned Policy (Policies weighted by the share of their term earned by the Valuation date).'),
+    ('ultimate_severity', 'Ultimate severity', 'metric_experience',
+     'sum(incurred * amount_factor) / sum(reported_claims * count_factor)', 'currency',
+     'Ultimate losses per Ultimate claim.'),
+    ('loss_ratio', 'Loss ratio', 'metric_experience',
+     'sum(incurred * amount_factor) / sum(commercial_premium * earned_share)', 'ratio',
+     'Ultimate losses divided by earned Commercial premium.'),
+    ('ae', 'A/E', 'metric_experience',
+     'sum(incurred * amount_factor) / sum(pure_premium * earned_share)', 'ratio',
+     'Actual over Expected on the Pricing basis: Ultimate losses divided by earned Pure premium. '
+     'Bands: adequate up to 1.05, watch up to 1.20, otherwise inadequate.');

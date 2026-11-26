@@ -26,3 +26,20 @@ def test_ultimate_is_incurred_plus_ibnr_per_underwriting_year(tiny_book):
     assert result.loc[2025, "ultimate_claim_count"] == pytest.approx(3.1)  # 3 reported + 0.1 IBNR
     assert result.loc[2026, "ultimate"] == pytest.approx(0.0)  # B4: no claims reported, nothing to develop
     assert result.loc[2026, "ultimate_claim_count"] == pytest.approx(0.0)
+
+
+def test_frequency_severity_loss_ratio_and_ae_on_ultimate(tiny_book):
+    result = metrics.query(tiny_book, ["ultimate_frequency", "ultimate_severity", "loss_ratio", "ae"])
+
+    # Earned Policies: B1-H, B1-F, B2-H, B3-F fully earned, B4-H half earned = 4.5
+    assert result.loc[0, "ultimate_frequency"] == pytest.approx(3.1 / 4.5)
+    assert result.loc[0, "ultimate_severity"] == pytest.approx(4610.0 / 3.1)
+    assert result.loc[0, "loss_ratio"] == pytest.approx(4610.0 / 199.8)  # over earned Commercial premium
+    assert result.loc[0, "ae"] == pytest.approx(4610.0 / 180.0)  # over earned Pure premium
+
+
+def test_ae_by_underwriting_year_uses_that_years_earned_pure_premium(tiny_book):
+    result = metrics.query(tiny_book, ["ae"], by=["underwriting_year"]).set_index("underwriting_year")
+
+    assert result.loc[2025, "ae"] == pytest.approx(4610.0 / 160.0)
+    assert result.loc[2026, "ae"] == pytest.approx(0.0)

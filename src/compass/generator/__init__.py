@@ -24,6 +24,7 @@ import pandas as pd
 from compass.generator.book import destinations_frame, generate_year
 from compass.generator.claims import generate_claims
 from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
+from compass.generator.pricing import PRICING_GLM_2025, coefficients_frame
 
 VALUATION_DATE = date(2026, 9, 30)  # must match valuation_date() in metrics/sql/05_valuation.sql
 UNDERWRITING_YEARS = (2025,)
@@ -53,4 +54,5 @@ def generate_book(seed: int) -> dict[str, pd.DataFrame]:
         "bookings": pd.concat(bookings, ignore_index=True),
         "policies": pd.concat(policies, ignore_index=True),
         "claims": pd.concat(claims, ignore_index=True),
+        "pricing_coefficients": coefficients_frame(PRICING_GLM_2025),
     }

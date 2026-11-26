@@ -28,7 +28,7 @@ def default_path() -> Path:
     return Path(os.environ.get(PATH_ENV, DEFAULT_PATH))
 
 # Base tables in load order (parents before children).
-TABLES = ("destinations", "bookings", "policies", "claims")
+TABLES = ("destinations", "bookings", "policies", "claims", "pricing_coefficients")
 
 Rows = pd.DataFrame | Iterable[Mapping]
 

@@ -1,10 +1,12 @@
-# Geographic A/E with its band: Caribbean and Gulf Coast are inadequate (A/E ~1.34-1.6 across seeds),
-# US Atlantic adequate (~0.9-0.97). Incurred alone (no IBNR) puts the Caribbean in the watch band (~1.16).
+# Geographic A/E with its band: Caribbean and Gulf Coast are inadequate (A/E ~1.36-1.63 at seeds 42-44),
+# US Atlantic adequate (~0.93-1.01). Incurred alone (no IBNR) understates every A/E by 15-20% (Caribbean
+# ~1.19-1.22, on the watch/inadequate edge), so the A/E column is what catches an answer without IBNR.
 name: judgment_regions_outside_adequate_2026
-prompt: Which destination regions are outside the adequate A/E band for underwriting year 2026?
+prompt: Which destination regions are outside the adequate A/E band for underwriting year 2026, and at what A/E?
 tags: [tier:judgment, set:working, trap:geographic_ae, trap:immature_year]
 sql: |
   SELECT destination_region,
+         sum(incurred * amount_factor) / sum(pure_premium * earned_share) AS ae,
          ae_band(sum(incurred * amount_factor) / sum(pure_premium * earned_share)) AS ae_band
   FROM metric_experience
   WHERE underwriting_year = 2026

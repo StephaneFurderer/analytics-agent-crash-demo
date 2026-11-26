@@ -6,6 +6,7 @@ Commands:
 - `dashboard`: open the Legacy dashboard (Streamlit)
 - `chapter N`: jump to a Chapter's tag and reset the warehouse and Context layer to it
 - `chat`: open the Analytics agent (nao chat; needs ANTHROPIC_API_KEY)
+- `report`: aggregate the archived benchmark results into the Accuracy matrix and a chart
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import sys
 from importlib import resources
 from pathlib import Path
 
-from compass import agent, chapters, warehouse
+from compass import agent, benchmark, chapters, warehouse
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,7 +43,21 @@ def main(argv: list[str] | None = None) -> int:
 
     commands.add_parser("chat", help="open the Analytics agent's nao chat (needs ANTHROPIC_API_KEY)")
 
+    report = commands.add_parser("report", help="turn benchmark results into the Accuracy matrix and a chart")
+    report.add_argument("--results", type=Path, default=benchmark.RESULTS_DIR, help="archived benchmark results")
+    report.add_argument("--questions", type=Path, default=benchmark.QUESTIONS_DIR, help="Benchmark questions")
+    report.add_argument("--out", type=Path, help="where to write the matrix and chart (default: --results)")
+
     args = parser.parse_args(argv)
+    if args.command == "report":
+        try:
+            print(benchmark.report(args.results, args.questions, args.out), end="")
+        except benchmark.BenchmarkError as error:
+            print(error, file=sys.stderr)
+            return 1
+        out = args.out or args.results
+        print(f"\nWritten: {out / 'accuracy_matrix.md'}, {out / 'accuracy_matrix.png'}")
+        return 0
     if args.command == "setup":
         return _setup(args.path)
     if args.command == "chat":

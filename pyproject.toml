@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "duckdb>=1.1",
+    "matplotlib>=3.9",
     "nao-core[anthropic,duckdb]>=0.4.9",
     "numpy>=2.0",
     "pandas>=2.2",

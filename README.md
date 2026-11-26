@@ -47,7 +47,7 @@ Never commit it.
 | `uv run demo reset` | Rebuild the warehouse from the seed. Identical every time; use it to undo any experiment | no |
 | `uv run demo dashboard` | Open the Legacy dashboard in your browser | no |
 | `uv run demo chapter N` | Jump to Chapter N (see below) | no |
-| `uv run demo chat` | *Planned (ticket #10).* Open the Analytics agent chat | yes |
+| `uv run demo chat` | Open the Analytics agent (nao chat) | yes |
 | `uv run demo benchmark` | *Planned (ticket #11).* Run the Benchmark questions for the current Chapter | yes, costs money |
 | `uv run demo report` | *Planned (ticket #12).* Turn benchmark results into the Accuracy matrix and a chart | no |
 | `uv run pytest` | Run the code tests (no key, no cost) | no |
@@ -108,6 +108,7 @@ Set a spending limit in the Anthropic console if you want a hard cap.
 
 ## Where things live
 
-- `src/compass/`: the generator, warehouse, Metric layer, dashboard and the `demo` CLI
+- `src/compass/`: the generator, warehouse, Metric layer, dashboard, Analytics agent launcher and the `demo` CLI
+- `nao/`: the Analytics agent's nao project (its Context layer)
 - `docs/`: ADRs (`docs/adr/`), the Business glossary (`docs/business/GLOSSARY.md`), the chapter tag policy
 - `GLOSSARY.md`: the demo's own vocabulary

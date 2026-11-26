@@ -5,6 +5,7 @@ Commands:
 - `reset`: rebuild the warehouse from scratch with the seeded generator
 - `dashboard`: open the Legacy dashboard (Streamlit)
 - `chapter N`: jump to a Chapter's tag and reset the warehouse and Context layer to it
+- `chat`: open the Analytics agent (nao chat; needs ANTHROPIC_API_KEY)
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import sys
 from importlib import resources
 from pathlib import Path
 
-from compass import chapters, warehouse
+from compass import agent, chapters, warehouse
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,9 +40,17 @@ def main(argv: list[str] | None = None) -> int:
     chapter.add_argument("--repo", type=Path, default=Path.cwd(), help="repo root (default: current directory)")
     chapter.add_argument("--path", type=Path, help="warehouse file (default: <repo>/warehouse/compass.duckdb)")
 
+    commands.add_parser("chat", help="open the Analytics agent's nao chat (needs ANTHROPIC_API_KEY)")
+
     args = parser.parse_args(argv)
     if args.command == "setup":
         return _setup(args.path)
+    if args.command == "chat":
+        try:
+            return agent.chat()
+        except agent.NotReady as problem:
+            print(problem, file=sys.stderr)
+            return 1
     if args.command == "reset":
         path = warehouse.reset(args.path, seed=args.seed)
         print(f"Warehouse rebuilt from seed {args.seed}: {path}")

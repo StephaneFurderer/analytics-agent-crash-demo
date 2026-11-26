@@ -97,3 +97,13 @@ def test_premium_is_positive_on_every_policy(full_con):
     assert full_con.sql(
         "SELECT count(*) FROM metric_policies WHERE pure_premium <= 0 OR trip_cost <= 0"
     ).fetchall()[0][0] == 0
+
+
+def test_underwriting_year_2025_has_claims_and_none_exceeds_trip_cost(full_con):
+    claims = metrics.query(full_con, ["reported_claim_count", "incurred"], by=["underwriting_year"])
+    over_cap = full_con.sql(
+        "SELECT count(*) FROM metric_claims WHERE paid_amount > trip_cost OR paid_amount <= 0"
+    ).fetchall()[0][0]
+
+    assert claims.loc[claims.underwriting_year == 2025, "reported_claim_count"].item() > 1_000
+    assert over_cap == 0

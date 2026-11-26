@@ -1,5 +1,6 @@
 """The Analytics agent's nao project, as committed (Chapter 2: synced table metadata only)."""
 
+import re
 import shutil
 import subprocess
 
@@ -59,3 +60,21 @@ def test_the_project_config_loads_with_a_key_from_the_environment():
     assert provider.provider == "anthropic"
     assert provider.api_key == DUMMY_KEY
     assert [m.id for m in provider.models] == ["claude-opus-5-5"]
+
+
+def test_the_committed_context_is_the_config_alone():
+    # Chapter 2: no Rules, annotations, glossary, docs or prompts; the metadata comes from sync.
+    assert committed_project_files() == ["nao_config.yaml"]
+
+
+def test_no_api_key_is_committed():
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=agent.REPO_ROOT, capture_output=True, text=True, check=True
+    ).stdout.split("\0")
+    key = re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}")
+    offenders = [
+        name for name in tracked
+        if name and (agent.REPO_ROOT / name).is_file()
+        and key.search((agent.REPO_ROOT / name).read_bytes().decode("utf-8", "ignore"))
+    ]
+    assert offenders == []

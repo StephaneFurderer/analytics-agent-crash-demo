@@ -47,6 +47,19 @@ POLICIES = [
 ]
 
 
+@pytest.fixture(scope="session")
+def full_warehouse(tmp_path_factory):
+    """The full seeded warehouse, built once per test session."""
+    return warehouse.reset(tmp_path_factory.mktemp("full") / "compass.duckdb", seed=warehouse.DEFAULT_SEED)
+
+
+@pytest.fixture
+def full_con(full_warehouse):
+    con = warehouse.connect(full_warehouse)
+    yield con
+    con.close()
+
+
 @pytest.fixture
 def tiny_book(tmp_path):
     path = tmp_path / "tiny.duckdb"

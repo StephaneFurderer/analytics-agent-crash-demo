@@ -7,6 +7,8 @@ import streamlit as st
 
 
 def format_value(value: float, unit: str) -> str:
+    if pd.isna(value):  # e.g. a breakdown cell with no claims
+        return "–"
     if unit == "count":
         return f"{value:,.0f}"
     if unit == "currency":

@@ -44,12 +44,18 @@ def test_expected_values_by_segment_follow_the_pricing_glm(tiny_book):
     assert holiday.expected_claim_frequency == pytest.approx(freq)  # one Policy
     assert holiday.expected_average_severity == pytest.approx(0.6 * pre + 0.4 * post)
 
-    # B2-H: baseline, age 35, TX, July, hotel, trip cost 500: every categorical term is a reference level.
-    freq = math.exp(-3.0 + 0.1 * -0.5 + 0.2 * math.log(500))
-    pre = math.exp(4.0 + 0.05 * -0.5 + 0.3 * math.log(500))
+    # baseline holds B2-H (age 35, TX, July, hotel, trip cost 500) and B4-H (age 50, FL, September,
+    # hotel, trip cost 7000): every categorical term is a reference level.
+    freq_b2 = math.exp(-3.0 + 0.1 * -0.5 + 0.2 * math.log(500))
+    pre_b2 = math.exp(4.0 + 0.05 * -0.5 + 0.3 * math.log(500))
+    freq_b4 = math.exp(-3.0 + 0.1 * 1.0 + 0.2 * math.log(7000))
+    pre_b4 = math.exp(4.0 + 0.05 * 1.0 + 0.3 * math.log(7000))
+    mix = 0.6 + 0.4 * math.exp(-0.5)
     baseline = result.loc["baseline"]
-    assert baseline.expected_claim_count == pytest.approx(freq)
-    assert baseline.expected_average_severity == pytest.approx(0.6 * pre + 0.4 * pre * math.exp(-0.5))
+    assert baseline.expected_claim_count == pytest.approx(freq_b2 + freq_b4)
+    assert baseline.expected_average_severity == pytest.approx(
+        (freq_b2 * pre_b2 + freq_b4 * pre_b4) * mix / (freq_b2 + freq_b4)
+    )
 
     # winter_birds holds B1-H and B1-F (two Policies): frequency is per Policy.
     winter = result.loc["winter_birds"]

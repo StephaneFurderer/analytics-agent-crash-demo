@@ -55,7 +55,7 @@ WITH
         LEFT JOIN f fm  ON fm.term  = 'month_' || mp.departure_month
     )
 SELECT
-    policy_id, booking_id, segment, coverage_type, product, destination_region, destination,
+    policy_id, booking_id, segment, coverage_type, product, destination_region, destination, underwriting_year,
     departure_month, purchase_date, departure_date, return_date, trip_cost,
     exp(frequency_eta) AS expected_claims,
     (1 - post_departure_share) * exp(severity_eta)

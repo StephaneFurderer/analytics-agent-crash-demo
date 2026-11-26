@@ -33,6 +33,12 @@ BOOKINGS = [
      "state_of_residence": "CA", "coverage_type": "flight_only",
      "purchase_date": date(2025, 11, 20), "departure_date": date(2026, 1, 5),
      "return_date": date(2026, 1, 12), "num_nights": 7},
+    # Purchased in 2026 and still on risk at the Valuation date (2026-09-30):
+    # 20 of its 40 days from purchase to return have passed, so half is earned.
+    {"booking_id": "B4", "segment": "baseline", "destination_id": 1, "age": 50,
+     "state_of_residence": "FL", "coverage_type": "hotel_only",
+     "purchase_date": date(2026, 9, 10), "departure_date": date(2026, 9, 25),
+     "return_date": date(2026, 10, 20), "num_nights": 25},
 ]
 
 POLICIES = [
@@ -44,6 +50,19 @@ POLICIES = [
      "pure_premium": 10.00, "commercial_premium": 11.10},
     {"policy_id": "B3-F", "booking_id": "B3", "product": "flight", "trip_cost": 800.0,
      "pure_premium": 30.00, "commercial_premium": 33.30},
+    {"policy_id": "B4-H", "booking_id": "B4", "product": "hotel", "trip_cost": 7000.0,
+     "pure_premium": 40.00, "commercial_premium": 44.40},
+]
+
+# Claims are paid in full when reported, so every Case reserve is zero.
+# Only claims reported by the Valuation date exist.
+CLAIMS = [
+    {"claim_id": "C1", "policy_id": "B1-H", "claim_type": "pre_departure", "loss_date": date(2025, 1, 20),
+     "report_date": date(2025, 1, 25), "paid_amount": 4000.00, "case_reserve": 0.0},
+    {"claim_id": "C2", "policy_id": "B1-F", "claim_type": "post_departure", "loss_date": date(2025, 2, 10),
+     "report_date": date(2025, 3, 15), "paid_amount": 250.00, "case_reserve": 0.0},
+    {"claim_id": "C3", "policy_id": "B2-H", "claim_type": "post_departure", "loss_date": date(2025, 7, 2),
+     "report_date": date(2025, 8, 1), "paid_amount": 300.00, "case_reserve": 0.0},
 ]
 
 # A tiny Pricing basis. Terms not listed (segment_baseline, state_TX, month_7, ...) are reference levels.
@@ -76,7 +95,7 @@ def full_con(full_warehouse):
 @pytest.fixture
 def tiny_book(tmp_path):
     path = tmp_path / "tiny.duckdb"
-    warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES,
+    warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES, claims=CLAIMS,
                     pricing_coefficients=PRICING_COEFFICIENTS)
     con = warehouse.connect(path)
     yield con

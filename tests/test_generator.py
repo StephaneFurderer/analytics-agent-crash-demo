@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 
 from compass import metrics, warehouse
-from compass.generator import pricing
+from compass.generator import VALUATION_DATE, pricing
 
 
 def test_reset_creates_the_warehouse_from_scratch(full_warehouse):
@@ -25,7 +25,7 @@ def test_two_resets_with_the_same_seed_are_identical(full_warehouse, tmp_path):
 
     first, second = warehouse.connect(full_warehouse), warehouse.connect(again)
     for table, key in [("destinations", "destination_id"), ("bookings", "booking_id"),
-                       ("policies", "policy_id")]:
+                       ("policies", "policy_id"), ("claims", "claim_id")]:
         a = first.sql(f"SELECT * FROM {table} ORDER BY {key}").df()
         b = second.sql(f"SELECT * FROM {table} ORDER BY {key}").df()
         assert a.equals(b), table
@@ -97,3 +97,58 @@ def test_premium_is_positive_on_every_policy(full_con):
     assert full_con.sql(
         "SELECT count(*) FROM metric_policies WHERE pure_premium <= 0 OR trip_cost <= 0"
     ).fetchall()[0][0] == 0
+
+
+def test_underwriting_year_2025_has_claims_and_none_exceeds_trip_cost(full_con):
+    claims = metrics.query(full_con, ["reported_claim_count", "incurred"], by=["underwriting_year"])
+    over_cap = full_con.sql(
+        "SELECT count(*) FROM metric_claims WHERE paid_amount > trip_cost OR paid_amount <= 0"
+    ).fetchall()[0][0]
+
+    assert claims.loc[claims.underwriting_year == 2025, "reported_claim_count"].item() > 1_000
+    assert over_cap == 0
+
+
+def test_claims_are_dated_on_the_trip_timeline(full_con):
+    misdated = full_con.sql("""
+        SELECT
+            count(*) FILTER (WHERE claim_type = 'post_departure'
+                             AND NOT (loss_date BETWEEN departure_date AND return_date)) AS post_outside_trip,
+            count(*) FILTER (WHERE claim_type = 'pre_departure'
+                             AND NOT (loss_date >= purchase_date AND loss_date < departure_date)) AS pre_outside,
+            count(*) FILTER (WHERE report_date < loss_date) AS reported_before_loss
+        FROM metric_claims
+    """).df().iloc[0]
+
+    assert misdated.post_outside_trip == 0
+    assert misdated.pre_outside == 0
+    assert misdated.reported_before_loss == 0
+
+
+def test_no_claim_is_reported_after_the_valuation_date(full_con):
+    last_report = full_con.sql("SELECT max(report_date) FROM metric_claims").fetchall()[0][0]
+    valuation = full_con.sql("SELECT valuation_date()").fetchall()[0][0]
+
+    assert valuation == VALUATION_DATE
+    assert last_report <= VALUATION_DATE
+
+
+def test_both_claim_types_occur_and_post_departure_severity_is_lower(full_con):
+    # The pricing GLM's post_departure severity coefficient is negative, so post-departure
+    # claims are smaller relative to trip cost than cancellations.
+    by_type = full_con.sql("""
+        SELECT claim_type, count(*) AS n, avg(paid_amount / trip_cost) AS share_of_trip_cost
+        FROM metric_claims GROUP BY 1
+    """).df().set_index("claim_type")
+    share = pricing.PRICING_GLM_2025.post_departure_share
+    n = by_type.n.sum()
+
+    assert by_type.loc["post_departure", "n"] / n == pytest.approx(share, abs=0.05)
+    assert by_type.loc["post_departure", "share_of_trip_cost"] < by_type.loc["pre_departure", "share_of_trip_cost"]
+
+
+def test_case_reserves_are_zero_so_incurred_equals_paid(full_con):
+    totals = metrics.query(full_con, ["paid", "case_reserve", "incurred"]).iloc[0]
+
+    assert totals.case_reserve == 0
+    assert totals.incurred == pytest.approx(totals.paid)

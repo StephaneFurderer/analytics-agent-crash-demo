@@ -30,6 +30,18 @@ def test_portfolio_tab_shows_metric_layer_numbers(app, full_con):
     assert shown["Policies"] == f"{expected.policy_count:,.0f}"
 
 
+def test_portfolio_tab_shows_incurred_claims_and_earned_premium(app, full_con):
+    expected = metrics.query(
+        full_con, ["earned_pure_premium", "earned_commercial_premium", "reported_claim_count", "incurred"]
+    ).iloc[0]
+    shown = {m.label: m.value for m in app.metric}
+
+    assert shown["Earned pure premium"] == f"${expected.earned_pure_premium:,.0f}"
+    assert shown["Earned commercial premium"] == f"${expected.earned_commercial_premium:,.0f}"
+    assert shown["Reported claims"] == f"{expected.reported_claim_count:,.0f}"
+    assert shown["Incurred"] == f"${expected.incurred:,.0f}"
+
+
 def test_pricing_tab_renders_without_exceptions(app):
     assert not app.exception
     assert "Pricing" in [tab.label for tab in app.tabs]

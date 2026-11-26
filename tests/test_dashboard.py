@@ -68,3 +68,38 @@ def test_there_is_no_geographic_ae_view(app):
     labels = [tab.label for tab in app.tabs] + [h.value for h in app.subheader] + [h.value for h in app.header]
     assert not any("A/E" in label and ("region" in label.lower() or "destination" in label.lower())
                    for label in labels)
+    ae_tables = [frame.value for frame in app.dataframe if "A/E" in frame.value.columns]
+    assert ae_tables
+    assert not any(col in frame.columns for frame in ae_tables for col in ("Destination region", "Destination"))
+
+
+def test_performance_tab_renders_without_exceptions(app):
+    assert not app.exception
+    assert [tab.label for tab in app.tabs][-1] == "Performance"
+
+
+def test_performance_tab_shows_ae_and_band_by_segment(app, full_con):
+    expected = metrics.query(full_con, ["ae"], by=["segment"])
+    shown = [frame.value for frame in app.dataframe if "Segment" in frame.value.columns and "A/E" in frame.value]
+
+    assert len(shown) == 1
+    assert list(shown[0].Segment) == list(expected.segment)
+    assert list(shown[0]["A/E"]) == [f"{v:.3f}" for v in expected.ae]
+    assert list(shown[0]["A/E band"]) == [metrics.ae_band(full_con, v) for v in expected.ae]
+
+
+def test_performance_tab_shows_ae_by_departure_month(app, full_con):
+    expected = metrics.query(full_con, ["ae"], by=["departure_month"])
+    shown = [frame.value for frame in app.dataframe
+             if "Departure month" in frame.value.columns and "A/E" in frame.value]
+
+    assert len(shown) == 1
+    assert list(shown[0]["A/E"]) == [f"{v:.3f}" for v in expected.ae]
+
+
+def test_performance_tab_shows_ultimate_and_ae_tiles(app, full_con):
+    expected = metrics.query(full_con, ["ultimate", "ae"]).iloc[0]
+    shown = {m.label: m.value for m in app.metric}
+
+    assert shown["Ultimate"] == f"${expected.ultimate:,.0f}"
+    assert shown["A/E"] == f"{expected.ae:.3f}"

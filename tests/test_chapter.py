@@ -48,3 +48,33 @@ def test_chapter_checks_out_the_tag_and_rebuilds_the_warehouse(repo, tmp_path, c
     assert metrics.query(con, ["booking_count"]).loc[0, "booking_count"] > 0
     con.close()
     assert "Accuracy matrix: Lookup 90%" in capsys.readouterr().out
+
+
+def test_chapter_refuses_to_mix_local_changes_into_a_chapter(repo, tmp_path, capsys):
+    (repo / "RULES.md").write_text("my own rule\n")
+    head = git(repo, "rev-parse", "HEAD")
+
+    assert cli.main(["chapter", "3", "--repo", str(repo), "--path", str(tmp_path / "w.duckdb")]) == 1
+
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert (repo / "RULES.md").read_text() == "my own rule\n"
+    assert "--force" in capsys.readouterr().err
+
+
+def test_chapter_force_discards_local_context_files_and_leaves_a_clean_state(repo, tmp_path):
+    (repo / "RULES.md").write_text("my own rule\n")
+    (repo / "my_skill.md").write_text("an experiment\n")
+
+    assert cli.main(["chapter", "3", "--force", "--repo", str(repo), "--path", str(tmp_path / "w.duckdb")]) == 0
+
+    assert (repo / "RULES.md").read_text() == "Chapter 3 rules\n"
+    assert not (repo / "my_skill.md").exists()
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_chapter_without_a_tag_lists_the_available_chapters(repo, tmp_path, capsys):
+    assert cli.main(["chapter", "5", "--repo", str(repo), "--path", str(tmp_path / "w.duckdb")]) == 1
+
+    err = capsys.readouterr().err
+    assert "chapter-5" in err and "chapter-3" in err
+    assert not (tmp_path / "w.duckdb").exists()

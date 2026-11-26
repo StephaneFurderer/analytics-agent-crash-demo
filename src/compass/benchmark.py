@@ -4,7 +4,8 @@ A Benchmark question is a YAML file under `nao/tests/<set>/` (`working/` or `hel
 
     name: lookup_policy_count_2025          # unique; nao's results refer to questions by name
     prompt: How many policies were sold in underwriting year 2025?
-    tags: [tier:lookup, set:working]        # one Tier, one set (matching the folder)
+    tags: [tier:lookup, set:working,        # one Tier, one set (matching the folder),
+           trap:booking_vs_policy]          # and any actuarial traps the question probes
     sql: |                                  # reference answer, from the Metric layer
       SELECT count(*) AS policy_count FROM metric_policies WHERE underwriting_year = 2025
 
@@ -64,6 +65,7 @@ class Question:
     sql: str | None
     path: Path
     rubric: tuple[Criterion, ...] = ()
+    traps: tuple[str, ...] = ()  # the actuarial traps it probes, from its `trap:<id>` tags
 
 
 def questions(tests_dir: Path = QUESTIONS_DIR) -> dict[str, Question]:
@@ -85,7 +87,8 @@ def questions(tests_dir: Path = QUESTIONS_DIR) -> dict[str, Question]:
         rubric = _rubric(path, data.get("rubric")) if set_name == "exploratory" else ()
         if name in found:
             raise BenchmarkError(f"{path}: the name {name!r} is already used by {found[name].path}")
-        found[name] = Question(name, tier, set_name, data["prompt"], data.get("sql"), path, rubric)
+        traps = tuple(tag.split(":", 1)[1] for tag in data.get("tags", []) if tag.startswith("trap:"))
+        found[name] = Question(name, tier, set_name, data["prompt"], data.get("sql"), path, rubric, traps)
     return found
 
 

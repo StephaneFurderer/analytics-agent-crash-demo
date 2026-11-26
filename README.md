@@ -49,7 +49,8 @@ Never commit it.
 | `uv run demo chapter N` | Jump to Chapter N (see below) | no |
 | `uv run demo chat` | Open the Analytics agent (nao chat) | yes |
 | `uv run demo benchmark` | Run the Benchmark questions (3 runs each) for the current Chapter; `--set heldout`, `--chapter N` | yes, costs money |
-| `uv run demo report` | Turn benchmark results into the Accuracy matrix and a chart (`benchmark-results/`) | no |
+| `uv run demo judge` | Score the current Chapter's Exploratory questions run against its rubric, Claude as judge; `--chapter N` | yes, costs money |
+| `uv run demo report` | Turn benchmark results into the Accuracy matrix and a chart, plus Exploratory scores (`benchmark-results/`) | no |
 | `uv run pytest` | Run the code tests (no key, no cost) | no |
 
 `reset`, `setup` and `dashboard` accept `--path` (or the `COMPASS_WAREHOUSE` variable) to use another warehouse file.
@@ -129,6 +130,24 @@ sql: |                                # the reference answer, from the Metric la
 nao compares the agent's answer with the reference SQL's result: same columns, rows in any order, numbers to 2
 decimals. `uv run pytest` checks every question's tags and runs its reference SQL on a fresh warehouse; it never runs
 the agent. The agent can't read `nao/tests/` (`nao/.naoignore`), so the reference SQL can't leak into its answers.
+
+### Exploratory questions and the rubric
+
+Open questions such as "What's driving our underperformance?" have no single correct number. They live in
+`nao/tests/exploratory/`, one YAML each with `tags: [set:exploratory]`, no `sql`, and a published `rubric`: a list
+of `{id, criterion}`, each a finding a good answer makes (for example "found the destination effect", "stated that
+2026 is immature", "did not invent a cause"). The rubric sits under `nao/tests/`, so the agent never sees it.
+
+```sh
+uv run demo benchmark --set exploratory   # runs them 3 times with nao test, then judges the answers
+uv run demo judge                         # (re-)judge the current Chapter's latest Exploratory run
+```
+
+The judge is Claude (`claude-opus-5-5`, with your API key). Per answer it gets the question, the rubric and the
+answer, and says which criteria are met. Its prompts, raw replies and per-criterion verdicts are saved next to the run
+as `benchmark-results/ch<N>/exploratory/scores_<stamp>.json`, for review. `demo report` shows them in a separate
+"Exploratory questions" section (score = share of criteria met, averaged over the runs, plus runs meeting each
+criterion); they are never part of Accuracy or the matrix chart.
 
 ## Benchmark cost
 

@@ -113,3 +113,11 @@ _Avoid_: Age, development period
 **Expert judgment**:
 An assumption an actuary chooses where the data alone cannot decide, such as how an immature **Underwriting year** will develop.
 _Avoid_: Override, gut feel
+
+**Exposure**:
+The trip cost at risk on a given date: the trip cost of every **Policy** purchased on or before that date whose trip has not ended (return date on or after it). It answers "how exposed are we to an event on that day?"
+_Avoid_: Sum insured, exposure premium
+
+**Hurricane loading**:
+An **Expert judgment** estimate of a known event's claims that are not yet in **Ultimate**, for claim counts and claim amounts, set per **Policy** at risk in the event's destination region on its date (per unit of **Exposure** for amounts). It is kept separate from the **Development factors** and is not part of Ultimate, A/E or Loss ratio unless "with loading" is stated.
+_Avoid_: Cat load, IBNR (it is on top of it)

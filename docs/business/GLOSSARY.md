@@ -87,8 +87,12 @@ _Avoid_: Outstanding, claim reserve
 _Avoid_: Reported losses
 
 **IBNR**:
-The estimate of claims incurred on or before the **Valuation date** but not yet reported by it.
-_Avoid_: Reserve, development
+The expected amount to be paid on claims that occurred on or before the **Valuation date** but had not been reported by it. It is estimated at the portfolio level (for example by **Underwriting year**), never per claim.
+_Avoid_: Development, late claims
+
+**Reserve**:
+The amount held for future payments: **Case reserves** plus **IBNR**. In this demo it equals **IBNR**.
+_Avoid_: Provision, liability
 
 **Ultimate**:
 The final value of an **Underwriting year**'s claims once every claim has been reported: **Incurred** plus **IBNR**.

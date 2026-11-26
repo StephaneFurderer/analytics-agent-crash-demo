@@ -37,7 +37,8 @@ import yaml
 from compass import agent, chapters
 
 TIERS = {"lookup": "Lookup", "definition": "Definition", "judgment": "Judgment"}
-SETS = {"working": "Working set", "heldout": "Held-out set"}
+SETS = {"working": "Working set", "heldout": "Held-out set", "exploratory": "Exploratory questions"}
+ACCURACY_SETS = ("working", "heldout")  # objective sets; Exploratory questions are judged, never in Accuracy
 RUNS = 3  # each question is asked this many times; correct only if every run is correct
 QUESTIONS_DIR = agent.PROJECT_DIR / "tests"
 RESULTS_DIR = agent.REPO_ROOT / "benchmark-results"
@@ -48,13 +49,21 @@ class BenchmarkError(Exception):
 
 
 @dataclass(frozen=True)
+class Criterion:
+    """One line of an Exploratory question's rubric: what a good answer does, checked by the judge."""
+    id: str
+    criterion: str
+
+
+@dataclass(frozen=True)
 class Question:
     name: str
-    tier: str
+    tier: str | None  # None for Exploratory questions
     set: str
     prompt: str
     sql: str | None
     path: Path
+    rubric: tuple[Criterion, ...] = ()
 
 
 def questions(tests_dir: Path = QUESTIONS_DIR) -> dict[str, Question]:
@@ -68,15 +77,26 @@ def questions(tests_dir: Path = QUESTIONS_DIR) -> dict[str, Question]:
         name = data.get("name", path.stem)
         tags = dict(tag.split(":", 1) for tag in data.get("tags", []) if ":" in tag)
         tier, set_name = tags.get("tier"), tags.get("set")
-        if tier not in TIERS:
+        if set_name != "exploratory" and tier not in TIERS:
             raise BenchmarkError(f"{path}: needs a tier tag, one of {', '.join(f'tier:{t}' for t in TIERS)}")
         if set_name not in SETS or relative.parts[0] != set_name:
             raise BenchmarkError(f"{path}: needs the tag set:{relative.parts[0]} and to live in a set folder "
                                  f"({', '.join(SETS)})")
+        rubric = _rubric(path, data.get("rubric")) if set_name == "exploratory" else ()
         if name in found:
             raise BenchmarkError(f"{path}: the name {name!r} is already used by {found[name].path}")
-        found[name] = Question(name, tier, set_name, data["prompt"], data.get("sql"), path)
+        found[name] = Question(name, tier, set_name, data["prompt"], data.get("sql"), path, rubric)
     return found
+
+
+def _rubric(path: Path, items) -> tuple[Criterion, ...]:
+    """An Exploratory question's rubric: a non-empty list of {id, criterion} with unique ids."""
+    if not items or not all(isinstance(i, dict) and i.get("id") and i.get("criterion") for i in items):
+        raise BenchmarkError(f"{path}: an Exploratory question needs a rubric: a list of {{id, criterion}}")
+    ids = [str(i["id"]) for i in items]
+    if len(set(ids)) != len(ids):
+        raise BenchmarkError(f"{path}: the rubric ids must be unique")
+    return tuple(Criterion(str(i["id"]), " ".join(str(i["criterion"]).split())) for i in items)
 
 
 # The benchmark's own chat server, on other ports than `demo chat` (5005/8005) so an open chat keeps running.
@@ -221,6 +241,8 @@ def outcomes(results_dir: Path = RESULTS_DIR, tests_dir: Path = QUESTIONS_DIR) -
     known = questions(tests_dir)
     rows = []
     for (chapter, set_name), path in latest_runs(results_dir).items():
+        if set_name not in ACCURACY_SETS:
+            continue
         data = json.loads(path.read_text())
         runs: dict[str, list[bool]] = {}
         for result in data["results"]:
@@ -304,11 +326,14 @@ def _chart(matrices: dict[str, pd.DataFrame], path: Path) -> None:
 def report(results_dir: Path = RESULTS_DIR, tests_dir: Path = QUESTIONS_DIR, out_dir: Path | None = None) -> str:
     """Write the Accuracy matrix (`accuracy_matrix.md`) and its chart (`accuracy_matrix.png`) to `out_dir`.
 
-    Returns the Markdown. The Working set and the Held-out set get separate tables.
+    Returns the Markdown. The Working set and the Held-out set get separate tables; Exploratory
+    questions get their own section with the judge's scores, outside the Accuracy matrix.
     """
+    from compass import exploratory
+
     out_dir = out_dir or results_dir
     results = outcomes(results_dir, tests_dir)
-    matrices = {s: accuracy_matrix(results, s) for s in SETS}
+    matrices = {s: accuracy_matrix(results, s) for s in ACCURACY_SETS}
     parts = ["# Accuracy matrix", "", f"Accuracy: share of Benchmark questions correct on all {RUNS} runs."]
     for set_name, matrix in matrices.items():
         parts += ["", f"## {SETS[set_name]}", ""]
@@ -316,6 +341,7 @@ def report(results_dir: Path = RESULTS_DIR, tests_dir: Path = QUESTIONS_DIR, out
         short = results[(results["set"] == set_name) & (results["runs"] < RUNS)]
         for _, row in short.iterrows():
             parts.append(f"\nCh{row.chapter} {row.question}: only {row.runs} of {RUNS} runs, counted as incorrect.")
+    parts += ["", "## Exploratory questions", "", *exploratory.report_lines(results_dir, tests_dir)]
     parts += ["", "## Runs", "", *(_run_summary(results_dir) or ["No benchmark results yet."])]
     markdown = "\n".join(parts) + "\n"
     out_dir.mkdir(parents=True, exist_ok=True)

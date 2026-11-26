@@ -1,0 +1,33 @@
+# Exploratory question (ticket #14): no single correct number, scored by Claude against the rubric
+# below (`uv run demo judge`). nao test ignores the `rubric` key; nao/.naoignore keeps the agent out
+# of tests/, so the agent never sees the rubric. Each criterion must be checkable from the answer
+# alone: say what a good answer finds, in the book's own terms.
+name: exploratory_underperformance
+prompt: What's driving our underperformance?
+tags: [set:exploratory]
+assertions:
+  - type: tool_call
+    tool: execute_sql
+rubric:
+  - id: destination_effect
+    criterion: >
+      Finds that the deterioration is concentrated on trips to Caribbean and Gulf Coast destinations
+      in underwriting year 2026, where Actual runs well above Expected (A/E clearly above 1), while
+      other regions and underwriting year 2025 run close to pricing.
+  - id: frequency_not_severity
+    criterion: >
+      Attributes the Caribbean and Gulf Coast effect to claim frequency (more claims per policy than
+      priced), not to larger claims (severity).
+  - id: immature_2026
+    criterion: >
+      States that underwriting year 2026 is immature at the 30 September 2026 Valuation date (many
+      trips not yet taken, claims not yet reported), so its figures lean on IBNR and are uncertain.
+  - id: hurricane
+    criterion: >
+      Points to the mid-September 2026 Gulf Coast hurricane as a separate event whose claims are
+      mostly not reported yet, so Gulf Coast 2026 is likely understated rather than fully explained.
+  - id: no_invented_cause
+    criterion: >
+      Does not attribute the underperformance to causes the data does not show (for example a
+      customer segment, a coverage type, rising claim severity, a price change or fraud), and does
+      not present guesses as findings.

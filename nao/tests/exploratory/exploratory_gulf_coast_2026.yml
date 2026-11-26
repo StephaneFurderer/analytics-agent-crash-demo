@@ -1,0 +1,26 @@
+# Exploratory question (ticket #14): scored by Claude against the rubric (`uv run demo judge`).
+# A good answer separates two things on the Gulf Coast: a lasting Drift since the start of 2026 and a
+# one-off hurricane in September whose claims mostly aren't reported yet.
+name: exploratory_gulf_coast_2026
+prompt: What's going on with our Gulf Coast business this year, and should we be worried?
+tags: [set:exploratory]
+assertions:
+  - type: tool_call
+    tool: execute_sql
+rubric:
+  - id: drift_before_the_event
+    criterion: >
+      Finds that Gulf Coast trips in underwriting year 2026 have more claims per policy than priced
+      throughout the year, not only in September, i.e. a lasting change the Pricing basis does not reflect.
+  - id: hurricane
+    criterion: >
+      Identifies the mid-September 2026 hurricane as a separate one-off event, and says most of its
+      claims are not yet reported at the 30 September 2026 Valuation date.
+  - id: immature_2026
+    criterion: >
+      Says that underwriting year 2026 is immature, so the Gulf Coast figures will still develop and
+      are uncertain.
+  - id: no_invented_cause
+    criterion: >
+      Does not explain the Gulf Coast results by causes the data does not show (for example a customer
+      segment, larger claims, a price change or fraud), and does not present guesses as findings.

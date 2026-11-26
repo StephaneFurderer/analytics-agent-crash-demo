@@ -7,6 +7,7 @@ always start from an empty file, so a warehouse is fully determined by its input
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Mapping
 from importlib import resources
 from pathlib import Path
@@ -18,6 +19,13 @@ from compass import metrics
 
 DEFAULT_PATH = Path("warehouse/compass.duckdb")
 DEFAULT_SEED = 42
+# Environment variable that points the dashboard (and tests) at a warehouse file.
+PATH_ENV = "COMPASS_WAREHOUSE"
+
+
+def default_path() -> Path:
+    """The warehouse file: $COMPASS_WAREHOUSE, else warehouse/compass.duckdb under the current directory."""
+    return Path(os.environ.get(PATH_ENV, DEFAULT_PATH))
 
 # Base tables in load order (parents before children).
 TABLES = ("destinations", "bookings", "policies")
@@ -51,14 +59,14 @@ def write(path: str | Path, **tables: Rows) -> Path:
     return path
 
 
-def reset(path: str | Path = DEFAULT_PATH, seed: int = DEFAULT_SEED) -> Path:
+def reset(path: str | Path, seed: int = DEFAULT_SEED) -> Path:
     """Rebuild the warehouse from scratch with the seeded generator."""
     from compass.generator import generate_book
 
     return write(path, **generate_book(seed))
 
 
-def connect(path: str | Path = DEFAULT_PATH) -> duckdb.DuckDBPyConnection:
+def connect(path: str | Path) -> duckdb.DuckDBPyConnection:
     """Open the warehouse read-only, the way the dashboard and the agent see it."""
     return duckdb.connect(str(path), read_only=True)
 

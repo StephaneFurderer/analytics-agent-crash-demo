@@ -2,8 +2,8 @@
 
 ADR 0002: only the generator, its tests and the benchmark reference answers may
 import this module. The warehouse loader, the Metric layer, the Context layer and
-the Legacy dashboard must never read it. A test enforces this for `compass`
-modules outside `compass.generator`.
+the Legacy dashboard must never read it. Tests check the warehouse file holds
+no trace of it (tests/test_hidden_ground_truth.py).
 
 The true model is the 2025 pricing GLM, plus the 2026
 destination Drift (`TRUE_MODEL[2026]`) and the September 2026 Gulf Coast hurricane (`HURRICANE`).

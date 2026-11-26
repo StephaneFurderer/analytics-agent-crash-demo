@@ -13,7 +13,7 @@ from compass.generator import VALUATION_DATE, generate_book, pricing
 
 
 def test_reset_creates_the_warehouse_from_scratch(full_warehouse):
-    con = warehouse.connect(full_warehouse)
+    con = metrics.connect(full_warehouse)
     by_year = metrics.query(con, ["booking_count", "policy_count"], by=["underwriting_year"]).set_index(
         "underwriting_year")
     con.close()
@@ -27,7 +27,7 @@ def test_reset_creates_the_warehouse_from_scratch(full_warehouse):
 def test_two_resets_with_the_same_seed_are_identical(full_warehouse, tmp_path):
     again = warehouse.reset(tmp_path / "again.duckdb", seed=warehouse.DEFAULT_SEED)
 
-    first, second = warehouse.connect(full_warehouse), warehouse.connect(again)
+    first, second = metrics.connect(full_warehouse), metrics.connect(again)
     for table, key in [("destinations", "destination_id"), ("bookings", "booking_id"),
                        ("policies", "policy_id"), ("claims", "claim_id")]:
         a = first.sql(f"SELECT * FROM {table} ORDER BY {key}").df()
@@ -40,7 +40,7 @@ def test_two_resets_with_the_same_seed_are_identical(full_warehouse, tmp_path):
 def test_a_different_seed_gives_a_different_book(full_warehouse, tmp_path):
     other = warehouse.reset(tmp_path / "other.duckdb", seed=7)
 
-    a, b = warehouse.connect(full_warehouse), warehouse.connect(other)
+    a, b = metrics.connect(full_warehouse), metrics.connect(other)
     premium_a = metrics.query(a, ["written_pure_premium"]).loc[0, "written_pure_premium"]
     premium_b = metrics.query(b, ["written_pure_premium"]).loc[0, "written_pure_premium"]
     a.close()

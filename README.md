@@ -129,7 +129,10 @@ sql: |                                # the reference answer, from the Metric la
 ```
 
 nao compares the agent's answer with the reference SQL's result: same columns, rows in any order, numbers to 2
-decimals. `uv run pytest` checks every question's tags and runs its reference SQL on a fresh warehouse; it never runs
+decimals. The warehouse file the agent queries has no Metric layer before Chapter 6
+([ADR 0005](docs/adr/0005-metric-layer-applied-per-connection.md)), so `demo benchmark` computes each reference answer
+through the Metric layer first and hands nao the result as literal rows (staged in the git-ignored `nao/tests/_run/`).
+`uv run pytest` checks every question's tags and runs its reference SQL on a fresh warehouse; it never runs
 the agent. The agent can't read `nao/tests/` (`nao/.naoignore`), so the reference SQL can't leak into its answers.
 
 ### The Working set

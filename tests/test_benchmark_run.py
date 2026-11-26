@@ -1,10 +1,12 @@
 """`demo benchmark`'s checks before it spends anything. The run itself is never part of pytest."""
 
+import shutil
 import subprocess
 
+import pandas as pd
 import pytest
 
-from compass import benchmark, cli
+from compass import agent, benchmark, cli, metrics, warehouse
 
 
 def git(repo, *args):
@@ -53,3 +55,32 @@ def test_demo_benchmark_refuses_a_set_without_questions(monkeypatch, capsys, tmp
     assert cli.main(["benchmark", "--chapter", "2", "--set", "heldout", "--project", str(tmp_path)]) == 1
 
     assert "No Held-out set questions" in capsys.readouterr().err
+
+
+def test_the_staged_reference_answers_are_the_metric_layers_answers_on_the_bare_warehouse(full_warehouse, tmp_path):
+    # nao runs reference SQL on the warehouse file the agent sees, which has no Metric layer: `demo benchmark`
+    # stages each question with its reference answer computed through the Metric layer, as literal rows.
+    project = tmp_path / "nao"
+    shutil.copytree(agent.PROJECT_DIR / "tests" / "working", project / "tests" / "working")
+
+    selection = benchmark.stage("working", project, full_warehouse)
+
+    original = benchmark.questions(project / "tests")
+    staged = benchmark.questions(project / "tests" / selection)
+    assert set(staged) == set(original)
+    bare, layered = warehouse.connect(full_warehouse), metrics.connect(full_warehouse)
+    try:
+        for name, question in staged.items():
+            assert question.set == "working" and question.tier == original[name].tier
+            assert "metric_" not in question.sql
+            # nao ignores row order.
+            expected = _sorted(layered.sql(original[name].sql).df())
+            got = _sorted(bare.sql(question.sql).df())
+            pd.testing.assert_frame_equal(got, expected, check_dtype=False)
+    finally:
+        bare.close()
+        layered.close()
+
+
+def _sorted(frame):
+    return frame.sort_values(list(frame.columns)).reset_index(drop=True)

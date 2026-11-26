@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 
-from compass import warehouse
+from compass import metrics, warehouse
 
 DESTINATIONS = [
     {"destination_id": 1, "city": "Miami Beach", "state_or_country": "FL", "region": "us_atlantic",
@@ -104,7 +104,7 @@ def full_warehouse(tmp_path_factory):
 
 @pytest.fixture
 def full_con(full_warehouse):
-    con = warehouse.connect(full_warehouse)
+    con = metrics.connect(full_warehouse)
     yield con
     con.close()
 
@@ -113,8 +113,7 @@ def full_con(full_warehouse):
 def tiny_book(tmp_path):
     path = tmp_path / "tiny.duckdb"
     warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES, claims=CLAIMS,
-                    pricing_coefficients=PRICING_COEFFICIENTS, development_factors=DEVELOPMENT_FACTORS,
-                    hurricane_loading=HURRICANE_LOADING)
-    con = warehouse.connect(path)
+                    pricing_coefficients=PRICING_COEFFICIENTS)
+    con = metrics.connect(path, development_factors=DEVELOPMENT_FACTORS, hurricane_loading=HURRICANE_LOADING)
     yield con
     con.close()

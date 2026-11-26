@@ -44,7 +44,7 @@ def test_chapter_checks_out_the_tag_and_rebuilds_the_warehouse(repo, tmp_path, c
     assert not (repo / "glossary.md").exists()
     assert git(repo, "rev-parse", "HEAD") == git(repo, "rev-parse", "ch3-rules^{commit}")
     assert git(repo, "status", "--porcelain") == ""
-    con = warehouse.connect(path)
+    con = metrics.connect(path)
     assert metrics.query(con, ["booking_count"]).loc[0, "booking_count"] > 0
     con.close()
     assert "Accuracy matrix: Lookup 90%" in capsys.readouterr().out

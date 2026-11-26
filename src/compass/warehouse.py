@@ -1,8 +1,13 @@
 """The local DuckDB warehouse (ADR 0001).
 
-`write` builds a warehouse from scratch out of base-table rows and applies the
-Metric layer on top. `reset` does the same from the seeded generator. Both
-always start from an empty file, so a warehouse is fully determined by its input.
+`write` builds a warehouse from scratch out of base-table rows. `reset` does the
+same from the seeded generator. Both always start from an empty file, so a
+warehouse is fully determined by its input.
+
+The file holds the base tables only: it is what the Analytics agent connects to,
+and before Chapter 6 the agent must not find the Metric layer there. Readers that
+need metrics (the dashboard, tests, benchmark reference answers) open it with
+`compass.metrics.connect`, which applies the Metric layer per connection.
 """
 
 from __future__ import annotations
@@ -14,8 +19,6 @@ from pathlib import Path
 
 import duckdb
 import pandas as pd
-
-from compass import metrics
 
 DEFAULT_PATH = Path("warehouse/compass.duckdb")
 DEFAULT_SEED = 42
@@ -33,13 +36,8 @@ TABLES = ("destinations", "bookings", "policies", "claims", "pricing_coefficient
 Rows = pd.DataFrame | Iterable[Mapping]
 
 
-def write(path: str | Path, development_factors: Rows | None = None, hurricane_loading: Rows | None = None,
-          **tables: Rows) -> Path:
-    """Create a fresh warehouse at `path` from base-table rows, then apply the Metric layer.
-
-    `development_factors` and `hurricane_loading` override the Expert-judgment assumptions the Metric
-    layer reads (default: the version-controlled CSVs in `compass/assumptions/`).
-    """
+def write(path: str | Path, **tables: Rows) -> Path:
+    """Create a fresh warehouse at `path` holding the base-table rows `tables` (base tables only)."""
     unknown = set(tables) - set(TABLES)
     if unknown:
         raise ValueError(f"unknown base tables: {sorted(unknown)}")
@@ -53,13 +51,11 @@ def write(path: str | Path, development_factors: Rows | None = None, hurricane_l
         con.execute(resources.files("compass").joinpath("schema.sql").read_text())
         for name in TABLES:
             if name in tables:
-                frame = _frame(tables[name])
-                columns = ", ".join(frame.columns)
-                con.register("_rows", frame)
+                rows = as_frame(tables[name])
+                columns = ", ".join(rows.columns)
+                con.register("_rows", rows)
                 con.execute(f"INSERT INTO {name} ({columns}) SELECT {columns} FROM _rows")
                 con.unregister("_rows")
-        metrics.apply(con, None if development_factors is None else _frame(development_factors),
-                      None if hurricane_loading is None else _frame(hurricane_loading))
     finally:
         con.close()
     return path
@@ -73,9 +69,13 @@ def reset(path: str | Path, seed: int = DEFAULT_SEED) -> Path:
 
 
 def connect(path: str | Path) -> duckdb.DuckDBPyConnection:
-    """Open the warehouse read-only, the way the dashboard and the agent see it."""
+    """Open the warehouse file read-only, the way the Analytics agent sees it: base tables only.
+
+    For metrics, use `compass.metrics.connect`.
+    """
     return duckdb.connect(str(path), read_only=True)
 
 
-def _frame(rows: Rows) -> pd.DataFrame:
+def as_frame(rows: Rows) -> pd.DataFrame:
+    """Rows (a DataFrame, or dicts) as a DataFrame."""
     return rows if isinstance(rows, pd.DataFrame) else pd.DataFrame(list(rows))

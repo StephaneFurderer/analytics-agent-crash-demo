@@ -1,8 +1,9 @@
 # The Analytics agent's nao project. Run it with `uv run demo chat`.
 #
 # Chapter 2: the agent sees the raw schema through nao's automatic sync only.
-# The Metric layer (the metric_* views and catalogue) is excluded until it
-# becomes part of the Context layer in a later Chapter.
+# The warehouse file holds the base tables only: the Metric layer is applied per
+# connection by the dashboard and the benchmark (ADR 0005) until it becomes part
+# of the Context layer in Chapter 6. The metric_* exclude is a second guard.
 #
 # The API key is read from the environment and never written here.
 # Do NOT run `nao init` in this folder: it rewrites this file with the key inlined.

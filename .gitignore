@@ -14,3 +14,4 @@ nao/tests/outputs/
 .env
 # Archived benchmark runs and the Accuracy matrix (`demo benchmark`, `demo report`).
 benchmark-results/
+nao/tests/_run/

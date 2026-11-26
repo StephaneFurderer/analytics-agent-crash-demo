@@ -4,6 +4,17 @@ The definitions live in `sql/*.sql`, applied in file-name order. Each file creat
 the views it needs and registers its metrics in `metric_definitions`. `query` is
 the only way the Legacy dashboard reads numbers: it looks up each metric's
 expression in the catalogue and groups it by the requested dimensions.
+
+The warehouse file holds the base tables only (the Analytics agent connects to it,
+and must not find the Metric layer or the hurricane there before Chapter 6).
+`connect` applies the layer per connection instead: an in-memory DuckDB that
+attaches the file read-only and creates the views, the catalogue and the
+assumption tables in memory. The dashboard, the tests and the benchmark's
+reference answers all read through it.
+
+Chapter 6 (the Metric layer joins the Context layer) can materialise it for the
+agent by applying it to the file itself after `warehouse.write`:
+`apply(duckdb.connect(str(path)))`, e.g. in `warehouse.reset` from that Chapter on.
 """
 
 from __future__ import annotations
@@ -13,8 +24,12 @@ from datetime import date
 from functools import reduce
 from importlib import resources
 
+from pathlib import Path
+
 import duckdb
 import pandas as pd
+
+from compass import warehouse
 
 # Placeholder in a catalogue view name for the date a metric is measured on (see `query`'s `on`).
 ON_DATE = "on_date"
@@ -63,6 +78,28 @@ def apply(con: duckdb.DuckDBPyConnection, development_factors: pd.DataFrame | No
     finally:
         con.unregister("_development_factors")
         con.unregister("_hurricane_loading")
+
+
+def connect(path: str | Path, development_factors: warehouse.Rows | None = None,
+            hurricane_loading: warehouse.Rows | None = None) -> duckdb.DuckDBPyConnection:
+    """A connection to the warehouse at `path` with the Metric layer applied (the file is not changed).
+
+    The file is attached read-only; its base tables appear under their own names, and the Metric layer
+    lives in memory for this connection only. `development_factors` and `hurricane_loading` override the
+    Expert-judgment assumptions (default: the version-controlled CSVs in `compass/assumptions/`).
+    """
+    con = duckdb.connect()
+    try:
+        literal = str(Path(path)).replace("'", "''")
+        con.execute(f"ATTACH '{literal}' AS warehouse (READ_ONLY)")
+        for table in warehouse.TABLES:
+            con.execute(f"CREATE VIEW {table} AS SELECT * FROM warehouse.main.{table}")
+        apply(con, None if development_factors is None else warehouse.as_frame(development_factors),
+              None if hurricane_loading is None else warehouse.as_frame(hurricane_loading))
+    except Exception:
+        con.close()
+        raise
+    return con
 
 
 def definitions(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:

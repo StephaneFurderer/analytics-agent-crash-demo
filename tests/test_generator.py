@@ -205,14 +205,39 @@ def test_case_reserves_are_zero_so_incurred_equals_paid(full_con):
     assert totals.incurred == pytest.approx(totals.paid)
 
 
+# A/E tolerances are statistical: TOLERANCE_SE standard errors of the A/E itself. Claims are compound Poisson, so the
+# standard error of a cell's Ultimate is about sqrt(sum of its claims' squared developed amounts); over earned Pure
+# premium, that is the A/E's standard error (about 0.03 to 0.06 for a region-year here). 4 SE keeps false failures
+# rare across all the cells checked while a misfit of the Drift's size (+40%) still stands out by 7 SE or more.
+TOLERANCE_SE = 4.0
+
+
+def _ae(con, by, year):
+    """A/E on Ultimate (`ae`) and on Incurred for one Underwriting year by `by`, with A/E's standard error."""
+    frame = metrics.query(con, ["ae", "incurred", "earned_pure_premium"], by=[by],
+                          where=f"underwriting_year = {year}").set_index(by)
+    frame["ae_on_incurred"] = frame.incurred / frame.earned_pure_premium
+    spread = con.sql(f"""
+        SELECT c.{by}, sqrt(sum((c.paid_amount * e.amount_factor) ^ 2)) AS ultimate_se
+        FROM metric_claims c JOIN metric_experience e USING (policy_id)
+        WHERE c.underwriting_year = {year} GROUP BY 1
+    """).df().set_index(by)
+    frame["se"] = spread.ultimate_se / frame.earned_pure_premium
+    return frame
+
+
+def _about_1(frame, column="ae"):
+    off = frame[(frame[column] - 1).abs() >= TOLERANCE_SE * frame.se]
+    assert off.empty, off[[column, "se"]]
+    assert (frame.se < 0.07).all(), frame.se  # small enough for "about 1" to mean something
+
+
 def test_2025_ae_is_about_1_across_segments(full_con):
     # The pricing worked in 2025: on Ultimate, with the standard development factors, A/E is about 1.
-    overall = metrics.query(full_con, ["ae"], where="underwriting_year = 2025").iloc[0]
-    by_segment = metrics.query(full_con, ["ae"], by=["segment"], where="underwriting_year = 2025")
+    by_segment = _ae(full_con, "segment", 2025)
 
-    assert overall.ae == pytest.approx(1.0, abs=0.05)
     assert len(by_segment) == 3
-    assert by_segment.ae.between(0.9, 1.1).all()
+    _about_1(by_segment)
 
 
 @pytest.fixture(scope="module")
@@ -249,31 +274,24 @@ def test_2026_ibnr_matches_the_claims_that_occurred_but_were_not_reported(full_c
     assert ibnr.ibnr == pytest.approx(late.paid_amount.sum(), rel=0.2)
 
 
-def _ae_by_region(con, year):
-    """A/E on Ultimate (the `ae` metric) and on Incurred, by destination region, for one Underwriting year."""
-    frame = metrics.query(con, ["ae", "incurred", "earned_pure_premium"], by=["destination_region"],
-                          where=f"underwriting_year = {year}").set_index("destination_region")
-    frame["ae_on_incurred"] = frame.incurred / frame.earned_pure_premium
-    return frame
-
-
 def test_2026_drift_is_clear_on_ultimate_for_caribbean_and_gulf_coast_and_partly_hidden_on_incurred(full_con):
-    ae = _ae_by_region(full_con, 2026)
+    ae = _ae(full_con, "destination_region", 2026)
 
     for region in ("caribbean", "gulf_coast"):
-        assert ae.loc[region, "ae"] > 1.2, region
+        assert ae.loc[region, "ae"] > 1.2, region  # "inadequate" on the dashboard's bands
+        assert ae.loc[region, "ae"] - 1 > TOLERANCE_SE * ae.loc[region, "se"], region
         assert ae.loc[region, "ae_on_incurred"] < ae.loc[region, "ae"] - 0.1, region
     # The rest of the book is still priced right.
-    assert ae.loc["us_atlantic", "ae"] == pytest.approx(1.0, abs=0.1)
+    _about_1(ae.loc[["us_atlantic"]])
 
 
 def test_2025_ae_is_about_1_by_destination_region(full_con):
     # Before the Drift the pricing worked everywhere, on Ultimate and (2025 being mature) on Incurred.
-    ae = _ae_by_region(full_con, 2025)
+    ae = _ae(full_con, "destination_region", 2025)
 
     assert set(ae.index) == {"us_atlantic", "gulf_coast", "caribbean"}
-    assert ae.ae.between(0.9, 1.1).all()
-    assert ae.ae_on_incurred.between(0.9, 1.1).all()
+    _about_1(ae)
+    _about_1(ae, "ae_on_incurred")
 
 
 @pytest.fixture(scope="module")

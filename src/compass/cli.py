@@ -3,6 +3,7 @@
 Commands:
 - `reset`: rebuild the warehouse from scratch with the seeded generator
 - `dashboard`: open the Legacy dashboard (Streamlit)
+- `chat`: open the Analytics agent (nao chat; needs ANTHROPIC_API_KEY)
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import sys
 from importlib import resources
 from pathlib import Path
 
-from compass import warehouse
+from compass import agent, warehouse
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,7 +29,15 @@ def main(argv: list[str] | None = None) -> int:
     dashboard = commands.add_parser("dashboard", help="open the Legacy dashboard")
     dashboard.add_argument("--path", type=Path, default=warehouse.default_path(), help="warehouse file")
 
+    commands.add_parser("chat", help="open the Analytics agent's nao chat (needs ANTHROPIC_API_KEY)")
+
     args = parser.parse_args(argv)
+    if args.command == "chat":
+        try:
+            return agent.chat()
+        except agent.NotReady as problem:
+            print(problem, file=sys.stderr)
+            return 1
     if args.command == "reset":
         path = warehouse.reset(args.path, seed=args.seed)
         print(f"Warehouse rebuilt from seed {args.seed}: {path}")

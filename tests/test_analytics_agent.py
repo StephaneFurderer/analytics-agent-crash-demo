@@ -4,9 +4,10 @@ import re
 import shutil
 import subprocess
 
+import pytest
 from nao_core.config import NaoConfig
 
-from compass import agent, warehouse
+from compass import agent, cli, warehouse
 
 from conftest import BOOKINGS, DESTINATIONS, POLICIES
 
@@ -78,3 +79,20 @@ def test_no_api_key_is_committed():
         and key.search((agent.REPO_ROOT / name).read_bytes().decode("utf-8", "ignore"))
     ]
     assert offenders == []
+
+
+def test_demo_chat_asks_for_the_api_key_when_it_is_missing(monkeypatch, capsys):
+    monkeypatch.delenv(agent.API_KEY_ENV, raising=False)
+
+    assert cli.main(["chat"]) == 1
+    assert agent.API_KEY_ENV in capsys.readouterr().err
+
+
+def test_chat_asks_for_a_reset_when_there_is_no_warehouse(tmp_path, monkeypatch):
+    monkeypatch.setenv(agent.API_KEY_ENV, DUMMY_KEY)
+    project = tmp_path / "nao"
+    project.mkdir()
+    shutil.copy(agent.PROJECT_DIR / "nao_config.yaml", project)
+
+    with pytest.raises(agent.NotReady, match="demo reset"):
+        agent.chat(project)

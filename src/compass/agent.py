@@ -28,6 +28,32 @@ def nao(*args: str, project: Path = PROJECT_DIR, check: bool = True) -> int:
     ).returncode
 
 
+class NotReady(Exception):
+    """The agent can't start yet; the message says what to do."""
+
+
 def sync(project: Path = PROJECT_DIR) -> None:
     """Regenerate the synced table metadata from the warehouse (no API key needed)."""
     nao("sync", project=project)
+
+
+def warehouse_path(project: Path = PROJECT_DIR) -> Path:
+    """The DuckDB file the project's nao config points at."""
+    from nao_core.config import NaoConfig  # heavy import, only when needed
+
+    [database] = NaoConfig.load(project, drop_invalid_optional_sections=True).databases
+    return (project / database.path).resolve()
+
+
+def chat(project: Path = PROJECT_DIR) -> int:
+    """Sync the table metadata, then open the nao chat (web UI) on the warehouse.
+
+    Blocks until the chat server stops (Ctrl-C). Raises NotReady without an API key or a warehouse.
+    """
+    if not os.environ.get(API_KEY_ENV):
+        raise NotReady(f"Set {API_KEY_ENV} to your Anthropic API key, e.g. `export {API_KEY_ENV}=sk-ant-...`.")
+    path = warehouse_path(project)
+    if not path.exists():
+        raise NotReady(f"No warehouse at {path}. Run `uv run demo reset` first.")
+    sync(project)
+    return nao("chat", project=project, check=False)

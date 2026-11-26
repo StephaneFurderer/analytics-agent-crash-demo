@@ -36,6 +36,10 @@ _Avoid_: Projection, outlook
 **Actual** divided by **Expected**.
 _Avoid_: Model accuracy, loss ratio
 
+**A/E band**:
+The label for an **A/E**: adequate up to 1.05, watch above 1.05 up to 1.20, otherwise inadequate.
+_Avoid_: Rating, traffic light
+
 ### Premium
 
 **Pure premium**:
@@ -101,6 +105,10 @@ _Avoid_: Final losses, projected losses
 **Development factor**:
 The ratio of **Ultimate** to **Incurred** for an **Underwriting year** at a given maturity. It is selected separately for claim counts and claim amounts, so **IBNR** has both an expected number of claims and an expected amount.
 _Avoid_: LDF, multiplier
+
+**Maturity**:
+How long claims have had to be reported: the number of whole months from a **Policy**'s departure month to the month of the **Valuation date** (negative if the trip has not started). **Development factors** are selected by maturity, and an **Underwriting year**'s **IBNR** is the sum over its maturities.
+_Avoid_: Age, development period
 
 **Expert judgment**:
 An assumption an actuary chooses where the data alone cannot decide, such as how an immature **Underwriting year** will develop.

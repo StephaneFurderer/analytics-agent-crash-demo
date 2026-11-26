@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 
 from compass import metrics, warehouse
-from compass.generator import VALUATION_DATE, pricing
+from compass.generator import VALUATION_DATE, generate_book, pricing
 
 
 def test_reset_creates_the_warehouse_from_scratch(full_warehouse):
@@ -152,3 +152,37 @@ def test_case_reserves_are_zero_so_incurred_equals_paid(full_con):
 
     assert totals.case_reserve == 0
     assert totals.incurred == pytest.approx(totals.paid)
+
+
+def test_2025_ae_is_about_1_across_segments(full_con):
+    # The pricing worked in 2025: on Ultimate, with the standard development factors, A/E is about 1.
+    overall = metrics.query(full_con, ["ae"], where="underwriting_year = 2025").iloc[0]
+    by_segment = metrics.query(full_con, ["ae"], by=["segment"], where="underwriting_year = 2025")
+
+    assert overall.ae == pytest.approx(1.0, abs=0.05)
+    assert len(by_segment) == 3
+    assert by_segment.ae.between(0.9, 1.1).all()
+
+
+def test_2025_ibnr_matches_the_claims_that_occurred_but_were_not_reported(full_warehouse):
+    # Regenerate 2025 with every claim reported (a far later Valuation date) and count the ones
+    # that occurred by the real Valuation date but were reported after it.
+    from compass.generator import STREAM_CLAIMS, generate_claims, rng_for
+    from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
+
+    book = generate_book(warehouse.DEFAULT_SEED)
+    every = generate_claims(rng_for(warehouse.DEFAULT_SEED, 2025, STREAM_CLAIMS), 2025, book["bookings"],
+                            book["policies"], book["destinations"], TRUE_MODEL[2025], CLAIM_PROCESS,
+                            date(2030, 12, 31))
+    every = every[every.policy_id.str.startswith("B2025")]
+    late = every[(every.loss_date <= VALUATION_DATE) & (every.report_date > VALUATION_DATE)]
+
+    con = warehouse.connect(full_warehouse)
+    try:
+        ibnr = metrics.query(con, ["ibnr_claim_count", "ibnr"], where="underwriting_year = 2025").iloc[0]
+    finally:
+        con.close()
+
+    assert len(late) > 5  # 2025 is mature: few claims are still unreported
+    assert ibnr.ibnr_claim_count == pytest.approx(len(late), rel=0.5)
+    assert ibnr.ibnr == pytest.approx(late.paid_amount.sum(), rel=0.5)

@@ -78,6 +78,16 @@ PRICING_COEFFICIENTS = [
     ]
 ]
 
+# Tiny standard development factors (Ultimate / Incurred), a step function of maturity in months from the
+# departure month to the Valuation month: a Policy uses the row with the largest maturity at or below its own.
+# Maturities: B1 departs Feb 2025 (19), B2 Jul 2025 (14), B3 Jan 2026 (8), B4 Sep 2026 (0).
+DEVELOPMENT_FACTORS = [
+    {"maturity_months": 0, "count_factor": 2.0, "amount_factor": 2.5},
+    {"maturity_months": 6, "count_factor": 1.5, "amount_factor": 1.6},
+    {"maturity_months": 12, "count_factor": 1.1, "amount_factor": 1.2},
+    {"maturity_months": 18, "count_factor": 1.0, "amount_factor": 1.0},
+]
+
 
 @pytest.fixture(scope="session")
 def full_warehouse(tmp_path_factory):
@@ -96,7 +106,7 @@ def full_con(full_warehouse):
 def tiny_book(tmp_path):
     path = tmp_path / "tiny.duckdb"
     warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES, claims=CLAIMS,
-                    pricing_coefficients=PRICING_COEFFICIENTS)
+                    pricing_coefficients=PRICING_COEFFICIENTS, development_factors=DEVELOPMENT_FACTORS)
     con = warehouse.connect(path)
     yield con
     con.close()

@@ -28,6 +28,7 @@ def table(frame: pd.DataFrame, catalogue: pd.DataFrame) -> None:
     shown = frame.copy()
     for metric in [c for c in frame.columns if c in catalogue.index]:
         shown[metric] = [format_value(v, catalogue.loc[metric, "unit"]) for v in frame[metric]]
-    labels = {c: catalogue.loc[c, "label"] if c in catalogue.index else c.replace("_", " ").capitalize()
+    labels = {c: catalogue.loc[c, "label"] if c in catalogue.index
+              else c.replace("_", " ").capitalize() if c.islower() else c  # a snake_case dim, or a ready label
               for c in frame.columns}
     st.dataframe(shown.rename(columns=labels), hide_index=True, use_container_width=True)

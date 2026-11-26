@@ -16,12 +16,33 @@ import duckdb
 import pandas as pd
 
 
-def apply(con: duckdb.DuckDBPyConnection) -> None:
-    """Create the Metric layer's views and catalogue on a warehouse connection."""
-    sql_dir = resources.files("compass.metrics").joinpath("sql")
-    for sql_file in sorted(sql_dir.iterdir(), key=lambda f: f.name):
-        if sql_file.name.endswith(".sql"):
-            con.execute(sql_file.read_text())
+def standard_development_factors() -> pd.DataFrame:
+    """The standard development factors: version-controlled assumption data an actuary edits.
+
+    One row per maturity (months from the departure month to the Valuation month), with the
+    Ultimate-to-Incurred factor for claim counts and for claim amounts. A Policy uses the row with
+    the largest maturity at or below its own (the first row below that). See the CSV's directory.
+    """
+    with resources.files("compass.assumptions").joinpath("development_factors.csv").open() as f:
+        return pd.read_csv(f, comment="#")
+
+
+def apply(con: duckdb.DuckDBPyConnection, development_factors: pd.DataFrame | None = None) -> None:
+    """Create the Metric layer's views and catalogue on a warehouse connection.
+
+    The assumption data (`development_factors`, default `standard_development_factors()`) is
+    exposed to the SQL files as the relation `_development_factors`.
+    """
+    if development_factors is None:
+        development_factors = standard_development_factors()
+    con.register("_development_factors", development_factors)
+    try:
+        sql_dir = resources.files("compass.metrics").joinpath("sql")
+        for sql_file in sorted(sql_dir.iterdir(), key=lambda f: f.name):
+            if sql_file.name.endswith(".sql"):
+                con.execute(sql_file.read_text())
+    finally:
+        con.unregister("_development_factors")
 
 
 def definitions(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
@@ -32,6 +53,21 @@ def definitions(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 def pricing_basis(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """The Pricing basis's coefficients: model, component, term, coefficient."""
     return con.sql("SELECT * FROM metric_pricing_basis").df()
+
+
+def development_factors(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """The development factors this warehouse uses: maturity_months, count_factor, amount_factor."""
+    return con.sql("SELECT * FROM metric_development_factors ORDER BY maturity_months").df()
+
+
+def ae_bands(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """The A/E bands in order: band, upper_bound (inclusive; NaN for the last), description."""
+    return con.sql("SELECT * FROM metric_ae_bands ORDER BY upper_bound NULLS LAST").df()
+
+
+def ae_band(con: duckdb.DuckDBPyConnection, ae: float) -> str:
+    """The A/E band label ('adequate', 'watch' or 'inadequate') for an A/E value."""
+    return con.execute("SELECT ae_band(?::DOUBLE)", [float(ae)]).fetchone()[0]
 
 
 def query(

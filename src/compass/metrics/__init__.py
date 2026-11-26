@@ -55,6 +55,16 @@ def pricing_basis(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return con.sql("SELECT * FROM metric_pricing_basis").df()
 
 
+def ae_bands(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """The A/E bands in order: band, upper_bound (inclusive; NaN for the last), description."""
+    return con.sql("SELECT * FROM metric_ae_bands ORDER BY upper_bound NULLS LAST").df()
+
+
+def ae_band(con: duckdb.DuckDBPyConnection, ae: float) -> str:
+    """The A/E band label ('adequate', 'watch' or 'inadequate') for an A/E value."""
+    return con.execute("SELECT ae_band(?::DOUBLE)", [float(ae)]).fetchone()[0]
+
+
 def query(
     con: duckdb.DuckDBPyConnection,
     metrics: Sequence[str],

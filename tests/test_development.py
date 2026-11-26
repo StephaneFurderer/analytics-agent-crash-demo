@@ -43,3 +43,18 @@ def test_ae_by_underwriting_year_uses_that_years_earned_pure_premium(tiny_book):
 
     assert result.loc[2025, "ae"] == pytest.approx(4610.0 / 160.0)
     assert result.loc[2026, "ae"] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("ae, band", [
+    (0.80, "adequate"), (1.05, "adequate"), (1.0501, "watch"), (1.20, "watch"), (1.2001, "inadequate"),
+    (25.6, "inadequate"),
+])
+def test_ae_bands(tiny_book, ae, band):
+    assert metrics.ae_band(tiny_book, ae) == band
+
+
+def test_ae_bands_are_defined_once_as_data(tiny_book):
+    bands = metrics.ae_bands(tiny_book)
+
+    assert list(bands.band) == ["adequate", "watch", "inadequate"]
+    assert list(bands.upper_bound[:2]) == [1.05, 1.20]

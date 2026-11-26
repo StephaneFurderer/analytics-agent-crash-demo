@@ -66,7 +66,9 @@ def test_the_project_config_loads_with_a_key_from_the_environment():
 
 def test_the_committed_context_is_the_config_alone():
     # Chapter 2: no Rules, annotations, glossary, docs or prompts; the metadata comes from sync.
-    assert committed_project_files() == ["nao_config.yaml"]
+    # The benchmark's questions (tests/) are committed too, but hidden from the agent by .naoignore.
+    context = [name for name in committed_project_files() if not name.startswith("tests/")]
+    assert context == [".naoignore", "nao_config.yaml"]
 
 
 def test_no_api_key_is_committed():

@@ -48,8 +48,8 @@ Never commit it.
 | `uv run demo dashboard` | Open the Legacy dashboard in your browser | no |
 | `uv run demo chapter N` | Jump to Chapter N (see below) | no |
 | `uv run demo chat` | Open the Analytics agent (nao chat) | yes |
-| `uv run demo benchmark` | *Planned (ticket #11).* Run the Benchmark questions for the current Chapter | yes, costs money |
-| `uv run demo report` | *Planned (ticket #12).* Turn benchmark results into the Accuracy matrix and a chart | no |
+| `uv run demo benchmark` | Run the Benchmark questions (3 runs each) for the current Chapter; `--set heldout`, `--chapter N` | yes, costs money |
+| `uv run demo report` | Turn benchmark results into the Accuracy matrix and a chart (`benchmark-results/`) | no |
 | `uv run pytest` | Run the code tests (no key, no cost) | no |
 
 `reset`, `setup` and `dashboard` accept `--path` (or the `COMPASS_WAREHOUSE` variable) to use another warehouse file.
@@ -95,6 +95,41 @@ Go back to the latest version with `git switch main && uv run demo reset`. Compa
 Run the commands from the repo root. The tag policy (tags are re-cut until recording, then frozen) and the
 annotation convention are in [docs/chapters.md](docs/chapters.md).
 
+## Benchmark and the Accuracy matrix
+
+```sh
+uv run demo chapter 3            # the Chapter whose agent you want to measure
+uv run demo benchmark            # Working set; add --set heldout for the Held-out set
+uv run demo report               # Accuracy matrix + chart in benchmark-results/
+```
+
+- `demo benchmark` syncs the table metadata, starts a private `nao chat` server (ports 5105/8105, so an open
+  `demo chat` keeps running), signs up a throwaway local user on it, runs `nao test -k 3` on one set and stops the
+  server. The run is filed under `benchmark-results/ch<N>/<set>/`. The Chapter is the `chN-*` tag checked out; on
+  any other commit, say which Chapter the run is for with `--chapter N` (see
+  [ADR 0004](docs/adr/0004-benchmark-runs-filed-by-chapter.md)). Re-running replaces that Chapter's result in the
+  report (the latest file wins; older files are kept).
+- `demo report` reads the latest run of each Chapter and set, and writes `accuracy_matrix.md` and
+  `accuracy_matrix.png`. A question is correct only if all 3 runs pass. The Working set and the Held-out set are
+  separate tables: Held-out results never count towards Working-set Accuracy. It needs no key and costs nothing.
+- `benchmark-results/` is git-ignored, so it survives `demo chapter N` and the matrix collects a column per Chapter.
+
+### Adding a Benchmark question
+
+One YAML file per question in `nao/tests/working/` (or `nao/tests/heldout/`):
+
+```yaml
+name: lookup_policy_count_2025        # unique across all questions
+prompt: How many policies did we write in underwriting year 2025?
+tags: [tier:lookup, set:working]      # tier: lookup | definition | judgment; set matches the folder
+sql: |                                # the reference answer, from the Metric layer (metric_* views)
+  SELECT count(policy_id) AS policy_count FROM metric_policies WHERE underwriting_year = 2025
+```
+
+nao compares the agent's answer with the reference SQL's result: same columns, rows in any order, numbers to 2
+decimals. `uv run pytest` checks every question's tags and runs its reference SQL on a fresh warehouse; it never runs
+the agent. The agent can't read `nao/tests/` (`nao/.naoignore`), so the reference SQL can't leak into its answers.
+
 ## Benchmark cost
 
 The benchmark runs only when you ask for it, per Chapter. Each Benchmark question is asked 3 times, and each
@@ -109,6 +144,6 @@ Set a spending limit in the Anthropic console if you want a hard cap.
 ## Where things live
 
 - `src/compass/`: the generator, warehouse, Metric layer, dashboard, Analytics agent launcher and the `demo` CLI
-- `nao/`: the Analytics agent's nao project (its Context layer)
+- `nao/`: the Analytics agent's nao project (its Context layer); `nao/tests/` holds the Benchmark questions
 - `docs/`: ADRs (`docs/adr/`), the Business glossary (`docs/business/GLOSSARY.md`), the chapter tag policy
 - `GLOSSARY.md`: the demo's own vocabulary

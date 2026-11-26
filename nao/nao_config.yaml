@@ -20,3 +20,9 @@ llm:
       models:
         - id: claude-opus-5-5
           default: true
+# The benchmark (`uv run demo benchmark`): each Benchmark question in tests/ is asked k times;
+# `demo report` counts it correct only if all k runs pass.
+test:
+  models: [anthropic:claude-opus-5-5]
+  k: 3
+  threads: 1

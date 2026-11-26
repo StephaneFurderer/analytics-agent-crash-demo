@@ -1,0 +1,9 @@
+# Seed question (ticket #11). Reference answer: the Metric layer's loss_ratio
+# (Ultimate over earned Commercial premium, not Paid over written premium).
+name: definition_loss_ratio_2025
+prompt: What is the loss ratio of underwriting year 2025?
+tags: [tier:definition, set:working]
+sql: |
+  SELECT sum(incurred * amount_factor) / sum(commercial_premium * earned_share) AS loss_ratio
+  FROM metric_experience
+  WHERE underwriting_year = 2025

@@ -10,6 +10,7 @@ A Chapter is the single annotated tag `chN-<slug>`, e.g. `ch3-rules` (see docs/c
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -60,8 +61,14 @@ def jump(repo: Path, chapter: int, warehouse_path: Path, *, force: bool = False)
     return tag, _git(repo, "tag", "-l", "--format=%(contents)", tag).stdout.strip()
 
 
-def _annotated_tags(repo: Path, glob: str) -> list[str]:
-    refs = _git(repo, "for-each-ref", "--format=%(objecttype) %(refname:short)", f"refs/tags/{glob}").stdout
+def at_head(repo: Path) -> list[int]:
+    """The Chapters whose annotated tag points at the checked-out commit."""
+    tags = _annotated_tags(repo, "ch*-*", "--points-at", "HEAD")
+    return sorted({int(m.group(1)) for t in tags if (m := re.fullmatch(r"ch(\d+)-.+", t))})
+
+
+def _annotated_tags(repo: Path, glob: str, *options: str) -> list[str]:
+    refs = _git(repo, "for-each-ref", *options, "--format=%(objecttype) %(refname:short)", f"refs/tags/{glob}").stdout
     return sorted(name for kind, name in (line.split(" ", 1) for line in refs.splitlines()) if kind == "tag")
 
 

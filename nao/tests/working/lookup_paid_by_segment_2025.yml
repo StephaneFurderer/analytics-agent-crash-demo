@@ -1,0 +1,9 @@
+# Seed question (ticket #11). Reference answer: the Metric layer's paid, by segment.
+name: lookup_paid_by_segment_2025
+prompt: What are the paid claims for each customer segment in underwriting year 2025?
+tags: [tier:lookup, set:working]
+sql: |
+  SELECT segment, coalesce(sum(paid_amount), 0) AS paid
+  FROM metric_claims
+  WHERE underwriting_year = 2025
+  GROUP BY segment

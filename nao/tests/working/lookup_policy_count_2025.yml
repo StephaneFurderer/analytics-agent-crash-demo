@@ -1,0 +1,8 @@
+# Seed question (ticket #11). Reference answer: the Metric layer's policy_count.
+name: lookup_policy_count_2025
+prompt: How many policies did we write in underwriting year 2025?
+tags: [tier:lookup, set:working]
+sql: |
+  SELECT count(policy_id) AS policy_count
+  FROM metric_policies
+  WHERE underwriting_year = 2025

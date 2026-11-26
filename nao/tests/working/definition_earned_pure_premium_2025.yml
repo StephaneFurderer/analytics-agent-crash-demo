@@ -1,0 +1,9 @@
+# Seed question (ticket #11). Reference answer: the Metric layer's earned_pure_premium
+# (earned to the Valuation date, not written).
+name: definition_earned_pure_premium_2025
+prompt: How much pure premium has underwriting year 2025 earned?
+tags: [tier:definition, set:working]
+sql: |
+  SELECT sum(pure_premium * earned_share) AS earned_pure_premium
+  FROM metric_policies
+  WHERE underwriting_year = 2025

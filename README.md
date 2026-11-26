@@ -122,7 +122,8 @@ One YAML file per question in `nao/tests/working/` (or `nao/tests/heldout/`):
 ```yaml
 name: lookup_policy_count_2025        # unique across all questions
 prompt: How many policies did we write in underwriting year 2025?
-tags: [tier:lookup, set:working]      # tier: lookup | definition | judgment; set matches the folder
+tags: [tier:lookup, set:working,      # tier: lookup | definition | judgment; set matches the folder
+       trap:booking_vs_policy]        # optional: the actuarial traps it probes
 sql: |                                # the reference answer, from the Metric layer (metric_* views)
   SELECT count(policy_id) AS policy_count FROM metric_policies WHERE underwriting_year = 2025
 ```
@@ -130,6 +131,28 @@ sql: |                                # the reference answer, from the Metric la
 nao compares the agent's answer with the reference SQL's result: same columns, rows in any order, numbers to 2
 decimals. `uv run pytest` checks every question's tags and runs its reference SQL on a fresh warehouse; it never runs
 the agent. The agent can't read `nao/tests/` (`nao/.naoignore`), so the reference SQL can't leak into its answers.
+
+### The Working set
+
+26 questions in `nao/tests/working/`: 8 Lookup, 8 Definition, 10 Judgment. They are asked the way an actuary
+would ask them, with the ambiguity left in: the Context layer is what has to resolve it, using the definitions in
+the [Business glossary](docs/business/GLOSSARY.md). Each targets one or more actuarial traps, named in its
+`trap:<id>` tags:
+
+| Trap | What goes wrong | Questions |
+|---|---|---|
+| `booking_vs_policy` | counting Policies where Bookings are meant | 5 |
+| `pure_vs_commercial` | the wrong premium basis (A/E is on Pure premium, Loss ratio on Commercial) | 10 |
+| `purchase_vs_departure` | the departure year instead of the Underwriting year (purchase) | 10 |
+| `written_vs_earned` | written premium where Earned premium is meant | 7 |
+| `immature_year` | treating immature 2026 as final (no IBNR) | 8 |
+| `expert_judgment` | leaving out the Development factors or the Hurricane loading | 8 |
+| `geographic_ae` | A/E by destination region, which the Legacy dashboard can't show | 3 |
+
+The `expert_judgment` questions use the assumptions in their reference answers, so they are expected to fail until
+Chapter 5 adds them to the context. `uv run pytest` also checks that every trap is covered, that each Expert-judgment
+answer changes when the assumptions are taken out, and that no answer names a different segment, region or A/E band
+when the book is drawn with another seed (so "correct" never hangs on noise).
 
 ### Exploratory questions and the rubric
 
@@ -152,11 +175,11 @@ criterion); they are never part of Accuracy or the matrix chart.
 ## Benchmark cost
 
 The benchmark runs only when you ask for it, per Chapter. Each Benchmark question is asked 3 times, and each
-answer is checked by the model once more, so a run makes roughly 4 model conversations per question.
+answer is then checked by the model in a short follow-up (it writes the query that returns the final answer).
 
-**Estimate, not yet measured:** with about 30 Working-set questions and an agent conversation of roughly 30k input
-and 2k output tokens, one Chapter's run is about 100 conversations, or **roughly US$10 to US$30** at Claude Opus
-list prices. The Held-out set adds a smaller, separate run. Chat in the web UI costs cents per question. `nao test`
+**Estimate, not yet measured:** the Working set has 26 questions, so one Chapter's run is 78 agent conversations of
+roughly 30k input and 2k output tokens, plus 78 shorter checks: about 100 full conversations' worth, or **roughly
+US$10 to US$30** at Claude Opus list prices. The Held-out set adds a smaller, separate run. Chat in the web UI costs cents per question. `nao test`
 reports the actual cost of each run in its results, and this section will be updated with measured numbers.
 Set a spending limit in the Anthropic console if you want a hard cap.
 

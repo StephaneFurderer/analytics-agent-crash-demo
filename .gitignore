@@ -6,3 +6,9 @@ __pycache__/
 warehouse/
 *.duckdb
 *.duckdb.wal
+# nao sync output: regenerated from the warehouse, and preview.md holds data rows (ADR 0001).
+nao/databases/
+nao/.meta/
+# nao chat / nao test scratch
+nao/tests/outputs/
+.env

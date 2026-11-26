@@ -55,6 +55,11 @@ def pricing_basis(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return con.sql("SELECT * FROM metric_pricing_basis").df()
 
 
+def development_factors(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """The development factors this warehouse uses: maturity_months, count_factor, amount_factor."""
+    return con.sql("SELECT * FROM metric_development_factors ORDER BY maturity_months").df()
+
+
 def ae_bands(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """The A/E bands in order: band, upper_bound (inclusive; NaN for the last), description."""
     return con.sql("SELECT * FROM metric_ae_bands ORDER BY upper_bound NULLS LAST").df()

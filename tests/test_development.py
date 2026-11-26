@@ -5,9 +5,14 @@ C3 300 on B2-H (maturity 14, factors 1.1 count / 1.2 amount). B3 (maturity 8) an
 have no reported claims, so chain-ladder development adds nothing for them.
 """
 
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
-from compass import metrics
+import compass
+from compass import metrics, warehouse
+from conftest import BOOKINGS, CLAIMS, DESTINATIONS, POLICIES, PRICING_COEFFICIENTS
 
 
 def test_ibnr_count_and_amount_come_from_the_factors_at_each_maturity(tiny_book):
@@ -58,3 +63,24 @@ def test_ae_bands_are_defined_once_as_data(tiny_book):
 
     assert list(bands.band) == ["adequate", "watch", "inadequate"]
     assert list(bands.upper_bound[:2]) == [1.05, 1.20]
+
+
+def test_the_warehouse_reads_the_version_controlled_factors_file(full_con):
+    csv = Path(compass.__file__).parent / "assumptions" / "development_factors.csv"
+    on_file = pd.read_csv(csv, comment="#")
+
+    in_use = metrics.development_factors(full_con)
+
+    pd.testing.assert_frame_equal(in_use, on_file, check_dtype=False)
+
+
+def test_editing_the_factors_changes_ibnr(tmp_path):
+    edited = [{"maturity_months": 0, "count_factor": 3.0, "amount_factor": 3.0}]
+    built = warehouse.write(tmp_path / "edited.duckdb", destinations=DESTINATIONS, bookings=BOOKINGS,
+                            policies=POLICIES, claims=CLAIMS, pricing_coefficients=PRICING_COEFFICIENTS,
+                            development_factors=edited)
+    con = warehouse.connect(built)
+    try:
+        assert metrics.query(con, ["ibnr"]).loc[0, "ibnr"] == pytest.approx(2 * 4550.0)
+    finally:
+        con.close()

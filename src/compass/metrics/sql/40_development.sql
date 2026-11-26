@@ -61,3 +61,10 @@ INSERT INTO metric_definitions VALUES
     ('ibnr', 'IBNR', 'metric_experience', 'sum(incurred * (amount_factor - 1))', 'currency',
      'Expected amount to be paid on claims occurred but not reported by the Valuation date: Incurred times '
      '(amount development factor - 1) at each maturity, from the standard development factors. The only Reserve.');
+
+INSERT INTO metric_definitions VALUES
+    ('ultimate', 'Ultimate', 'metric_experience', 'sum(incurred * amount_factor)', 'currency',
+     'Final value of claims once every claim has been reported: Incurred plus IBNR, on the standard '
+     'development factors. Actual for A/E.'),
+    ('ultimate_claim_count', 'Ultimate claims', 'metric_experience', 'sum(reported_claims * count_factor)', 'count',
+     'Final number of claims once every claim has been reported: reported claims plus IBNR claims.');

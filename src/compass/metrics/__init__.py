@@ -29,6 +29,11 @@ def definitions(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return con.sql("SELECT * FROM metric_definitions ORDER BY metric").df()
 
 
+def pricing_basis(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """The Pricing basis's coefficients: model, component, term, coefficient."""
+    return con.sql("SELECT * FROM metric_pricing_basis").df()
+
+
 def query(
     con: duckdb.DuckDBPyConnection,
     metrics: Sequence[str],

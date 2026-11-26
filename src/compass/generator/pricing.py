@@ -24,6 +24,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 import numpy as np
+import pandas as pd
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,18 @@ PRICING_GLM_2025 = GLM(
     post_departure_share=0.55,
     expense_load=1.11,
 )
+
+
+def coefficients_frame(glm: GLM) -> pd.DataFrame:
+    """The `pricing_coefficients` warehouse rows for `glm`: one row per term."""
+    rows = [(component, term, value)
+            for component, terms in (("frequency", glm.frequency), ("severity", glm.severity))
+            for term, value in terms.items()]
+    rows += [("premium", "post_departure_share", glm.post_departure_share),
+             ("premium", "expense_load", glm.expense_load)]
+    frame = pd.DataFrame(rows, columns=["component", "term", "coefficient"])
+    frame.insert(0, "model", glm.name)
+    return frame
 
 
 def frequency(glm: GLM, f: Mapping[str, np.ndarray]) -> np.ndarray:

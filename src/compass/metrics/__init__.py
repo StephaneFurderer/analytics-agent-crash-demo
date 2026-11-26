@@ -9,11 +9,15 @@ expression in the catalogue and groups it by the requested dimensions.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import date
 from functools import reduce
 from importlib import resources
 
 import duckdb
 import pandas as pd
+
+# Placeholder in a catalogue view name for the date a metric is measured on (see `query`'s `on`).
+ON_DATE = "on_date"
 
 
 def standard_development_factors() -> pd.DataFrame:
@@ -70,15 +74,23 @@ def ae_band(con: duckdb.DuckDBPyConnection, ae: float) -> str:
     return con.execute("SELECT ae_band(?::DOUBLE)", [float(ae)]).fetchone()[0]
 
 
+def exposure(con: duckdb.DuckDBPyConnection, on: date, by: Sequence[str] = (),
+             where: str | None = None) -> pd.DataFrame:
+    """Trip cost at risk on the date `on` (`exposure`) and the number of Policies at risk, by `by`."""
+    return query(con, ["exposure", "policies_at_risk"], by=by, where=where, on=on)
+
+
 def query(
     con: duckdb.DuckDBPyConnection,
     metrics: Sequence[str],
     by: Sequence[str] = (),
     where: str | None = None,
+    on: date | None = None,
 ) -> pd.DataFrame:
     """Compute `metrics` broken down by the dimension columns `by`.
 
-    `where` is an optional SQL filter applied to every metric's view.
+    `where` is an optional SQL filter applied to every metric's view. `on` is the date for metrics
+    measured on a date (their view takes `on_date`, e.g. exposure); other metrics ignore it.
     """
     catalogue = definitions(con).set_index("metric")
     missing = [m for m in metrics if m not in catalogue.index]
@@ -90,6 +102,10 @@ def query(
     frames = []
     for view_name, group in catalogue.loc[list(metrics)].groupby("view_name", sort=False):
         select = [f"{row.expression} AS {name}" for name, row in group.iterrows()]
+        if ON_DATE in view_name:
+            if on is None:
+                raise ValueError(f"metrics {list(group.index)} are measured on a date: pass on=<date>")
+            view_name = view_name.replace(ON_DATE, f"DATE '{on.isoformat()}'")
         sql = f"SELECT {', '.join(by + select)} FROM {view_name}"
         if where:
             sql += f" WHERE {where}"

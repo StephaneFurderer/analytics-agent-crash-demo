@@ -1,11 +1,11 @@
 """Claims for one Underwriting year, drawn from the true model.
 
 Per Policy, the number of claims is Poisson around the model's frequency. Each
-claim is post-departure (delay, interruption) with the model's
-`post_departure_share`, otherwise pre-departure (cancellation). Its amount is
-Gamma around the model's severity mean for that claim type, capped at the trip
-cost. Pre-departure claims occur between purchase and departure; post-departure
-claims occur within the trip. Each claim is reported after a reporting lag, and
+claim's loss date is uniform over the cover period (purchase to return, both days
+included), as premium is earned: it is pre-departure (cancellation) before the
+departure date, post-departure (delay, interruption) from it. Its amount is Gamma
+around the model's severity mean for that claim type, capped at the trip cost.
+Each claim is reported after a reporting lag, and
 is paid in full when reported. Only claims reported by `reported_by` (the Valuation date) are kept;
 `None` keeps every claim.
 """
@@ -17,7 +17,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from compass.generator.pricing import GLM, frequency, severity
+from compass.generator.pricing import GLM, cover_days, frequency, severity
 from compass.generator.truth import ClaimProcess
 
 
@@ -41,16 +41,14 @@ def generate_claims(rng: np.random.Generator, year: int, bookings: pd.DataFrame,
     n = len(idx)
     f = {k: v[idx] for k, v in features.items()}
 
-    post = rng.random(n) < model.post_departure_share
+    # Loss date: uniform over the cover period's days; on or after departure it is a post-departure claim.
+    span = cover_days(purchase[idx], ret[idx])
+    loss = purchase[idx] + np.floor(rng.random(n) * span).astype(int).astype("timedelta64[D]")
+    post = loss >= departure[idx]
     mean = severity(model, f, post)
     amount = rng.gamma(process.severity_shape, mean / process.severity_shape)
     amount = np.minimum(np.round(np.maximum(amount, 0.01), 2), f["trip_cost"])
 
-    # Loss date: uniform over [purchase, departure) before departure, [departure, return] within the trip.
-    start = np.where(post, departure[idx], purchase[idx])
-    span = np.where(post, (ret[idx] - departure[idx]).astype(int) + 1,
-                    (departure[idx] - purchase[idx]).astype(int))
-    loss = start + np.floor(rng.random(n) * span).astype(int).astype("timedelta64[D]")
     median, sigma = process.reporting_lag_days
     lag = np.round(rng.lognormal(np.log(median), sigma, n)).astype(int)
     report = loss + lag.astype("timedelta64[D]")

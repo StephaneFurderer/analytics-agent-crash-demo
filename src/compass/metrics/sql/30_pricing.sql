@@ -11,7 +11,9 @@ FROM pricing_coefficients;
 --                    + product_flight [flight] + segment_<s> + state_<st> + month_<departure month>
 --   log(severity)  = intercept + age * (age - 40) / 10 + log_trip_cost * ln(trip_cost)
 --                    + product_flight [flight] + post_departure [post-departure claim]
--- A term that is not stored (a reference level) contributes 0.
+-- Expected severity mixes the two claim types by the Policy's post_departure_share (its trip
+-- days over its cover days, from metric_policies). A term that is not stored (a reference level)
+-- contributes 0.
 
 CREATE VIEW metric_pricing_expected AS
 WITH
@@ -27,14 +29,11 @@ WITH
             (SELECT coefficient FROM s WHERE term = 'age')                    AS s_age,
             (SELECT coefficient FROM s WHERE term = 'log_trip_cost')          AS s_log_trip_cost,
             (SELECT coefficient FROM s WHERE term = 'product_flight')         AS s_product_flight,
-            (SELECT coefficient FROM s WHERE term = 'post_departure')         AS s_post_departure,
-            (SELECT coefficient FROM pricing_coefficients
-             WHERE component = 'premium' AND term = 'post_departure_share')  AS post_departure_share
+            (SELECT coefficient FROM s WHERE term = 'post_departure')         AS s_post_departure
     ),
     eta AS (
         SELECT
             mp.*,
-            c.post_departure_share,
             c.s_post_departure,
             c.f_intercept
                 + c.f_age * (b.age - 40) / 10.0
@@ -71,4 +70,4 @@ INSERT INTO metric_definitions VALUES
     ('expected_average_severity', 'Expected average severity', 'metric_pricing_expected',
      'sum(expected_claims * expected_severity) / sum(expected_claims)', 'currency',
      'Expected mean claim amount on the Pricing basis: pricing GLM severity, mixing pre- and post-departure '
-     'claims by the post-departure share, weighted by expected claims.');
+     'claims by each Policy''s post-departure share (trip days over cover days), weighted by expected claims.');

@@ -48,8 +48,9 @@ CREATE TABLE claims (
 
 -- The Pricing basis: the 2025 pricing GLM's coefficients, as the pricing team set
 -- them. It is the only model in the warehouse (ADR 0002). `component` is
--- 'frequency' or 'severity' (GLM terms, log link) or 'premium' (the claim-type
--- mix `post_departure_share` and the `expense_load`).
+-- 'frequency' or 'severity' (GLM terms, log link) or 'premium' (the
+-- `expense_load`). The claim-type mix is not a coefficient: each Policy's
+-- post-departure share is its trip days over its cover days, from its dates.
 CREATE TABLE pricing_coefficients (
     model       VARCHAR NOT NULL,
     component   VARCHAR NOT NULL CHECK (component IN ('frequency', 'severity', 'premium')),

@@ -10,8 +10,9 @@ Frequency (Poisson, log link), claims per Policy:
 Severity (Gamma, log link), mean amount per claim:
     log(mu) = intercept + age * (age - 40) / 10 + log_trip_cost * log(trip_cost)
               + product_flight [flight] + post_departure [post-departure claim]
-A claim is post-departure (delay, interruption) with probability
-`post_departure_share`, otherwise pre-departure (cancellation).
+A claim is equally likely on any day of the cover period (purchase to return, both days included):
+post-departure (delay, interruption) if on the trip, otherwise pre-departure (cancellation). So a
+Policy's post-departure share is its trip days over its cover days (`post_departure_share`).
 
 Pure premium = lambda * ((1 - share) * mu_pre + share * mu_post).
 Commercial premium = Pure premium * expense_load.
@@ -32,7 +33,6 @@ class GLM:
     name: str
     frequency: Mapping[str, float]
     severity: Mapping[str, float]
-    post_departure_share: float
     expense_load: float
     # Extra frequency terms keyed by destination region. Empty on the Pricing basis.
     region_frequency: Mapping[str, float] = field(default_factory=lambda: MappingProxyType({}))
@@ -64,7 +64,6 @@ PRICING_GLM_2025 = GLM(
         "product_flight": -0.20,
         "post_departure": -0.30,
     }),
-    post_departure_share=0.55,
     expense_load=1.11,
 )
 
@@ -74,8 +73,7 @@ def coefficients_frame(glm: GLM) -> pd.DataFrame:
     rows = [(component, term, value)
             for component, terms in (("frequency", glm.frequency), ("severity", glm.severity))
             for term, value in terms.items()]
-    rows += [("premium", "post_departure_share", glm.post_departure_share),
-             ("premium", "expense_load", glm.expense_load)]
+    rows += [("premium", "expense_load", glm.expense_load)]
     frame = pd.DataFrame(rows, columns=["component", "term", "coefficient"])
     frame.insert(0, "model", glm.name)
     return frame
@@ -106,9 +104,19 @@ def severity(glm: GLM, f: Mapping[str, np.ndarray], post_departure: np.ndarray |
     return np.exp(eta)
 
 
+def cover_days(purchase: np.ndarray, ret: np.ndarray) -> np.ndarray:
+    """Days in the cover period, purchase to return, both included (datetime64[D] arrays)."""
+    return (ret - purchase).astype(int) + 1
+
+
+def post_departure_share(purchase: np.ndarray, departure: np.ndarray, ret: np.ndarray) -> np.ndarray:
+    """A Policy's share of claims that are post-departure: its trip days over its cover days."""
+    return ((ret - departure).astype(int) + 1) / cover_days(purchase, ret)
+
+
 def pure_premium(glm: GLM, f: Mapping[str, np.ndarray]) -> np.ndarray:
-    """Expected loss per Policy under `glm`."""
-    share = glm.post_departure_share
+    """Expected loss per Policy under `glm`; `f` includes each Policy's `post_departure_share`."""
+    share = f["post_departure_share"]
     mean_severity = (1 - share) * severity(glm, f, False) + share * severity(glm, f, True)
     return frequency(glm, f) * mean_severity
 

@@ -5,6 +5,7 @@ These tests may read the generator's configuration, as ADR 0002 allows.
 
 from datetime import date
 
+import pandas as pd
 import pytest
 
 from compass import metrics, warehouse
@@ -147,18 +148,54 @@ def test_no_claim_is_reported_after_the_valuation_date(full_con):
     assert last_report <= VALUATION_DATE
 
 
-def test_both_claim_types_occur_and_post_departure_severity_is_lower(full_con):
+def test_post_departure_severity_is_lower(full_con):
     # The pricing GLM's post_departure severity coefficient is negative, so post-departure
     # claims are smaller relative to trip cost than cancellations.
     by_type = full_con.sql("""
-        SELECT claim_type, count(*) AS n, avg(paid_amount / trip_cost) AS share_of_trip_cost
+        SELECT claim_type, avg(paid_amount / trip_cost) AS share_of_trip_cost
         FROM metric_claims GROUP BY 1
     """).df().set_index("claim_type")
-    share = pricing.PRICING_GLM_2025.post_departure_share
-    n = by_type.n.sum()
 
-    assert by_type.loc["post_departure", "n"] / n == pytest.approx(share, abs=0.05)
     assert by_type.loc["post_departure", "share_of_trip_cost"] < by_type.loc["pre_departure", "share_of_trip_cost"]
+
+
+@pytest.fixture(scope="module")
+def developed_claims(full_warehouse):
+    """Every ordinary claim of the seeded book (fully developed), with its Policy's Metric-layer shares."""
+    claims = generate_book(warehouse.DEFAULT_SEED, reported_by=None, claims=("ordinary",))["claims"]
+    con = metrics.connect(full_warehouse)
+    try:
+        shares = con.sql(
+            "SELECT policy_id, underwriting_year, earned_share, post_departure_share FROM metric_policies").df()
+    finally:
+        con.close()
+    return claims.merge(shares, on="policy_id", validate="many_to_one")
+
+
+def _within(observed: pd.Series, expected: pd.Series, z: float = 4.0) -> None:
+    """The share of claims `observed` (booleans) matches the mean of their probabilities `expected`, within z SE."""
+    se = (expected * (1 - expected)).sum() ** 0.5 / len(expected)
+    assert abs(observed.mean() - expected.mean()) < z * se, (observed.mean(), expected.mean(), se)
+
+
+def test_claims_occur_as_premium_is_earned_so_occurred_losses_match_earned_premium(developed_claims):
+    # Premium is earned evenly over the cover period (purchase to return), and a claim is as likely on any of
+    # its days: the claims that occurred by the Valuation date are each Policy's earned share of its claims.
+    # This is what keeps an immature year's A/E unbiased (occurrence never lags earning).
+    year = developed_claims[developed_claims.underwriting_year == 2026]
+    occurred = year.loss_date <= VALUATION_DATE
+
+    assert 0.3 < occurred.mean() < 0.9  # 2026 is partly earned
+    _within(occurred, year.earned_share)
+
+
+def test_claims_are_post_departure_in_proportion_to_the_trips_days_in_the_cover_period(developed_claims):
+    # The Pricing basis splits each Policy's claims by its post_departure_share (trip days / cover days),
+    # so Pure premium is the generator's expected loss.
+    post = developed_claims.claim_type == "post_departure"
+
+    assert 0.1 < post.mean() < 0.9  # both claim types occur
+    _within(post, developed_claims.post_departure_share)
 
 
 def test_case_reserves_are_zero_so_incurred_equals_paid(full_con):

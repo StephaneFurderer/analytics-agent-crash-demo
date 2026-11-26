@@ -2,7 +2,7 @@
 
 A Policy is at risk on a date from its purchase date to its return date, both included. Tiny book:
 B1 (Miami, 10 Jan - 3 Mar 2025, two Policies 9000 + 600), B2-H (Galveston, 1 Jun - 4 Jul 2025, 500),
-B3-F (Nassau, 20 Nov 2025 - 12 Jan 2026, 800), B4-H (Miami, 10 Sep - 20 Oct 2026, 7000).
+B3-F (Nassau, 20 Nov 2025 - 12 Jan 2026, 800), B4-H (Miami, 11 Sep - 20 Oct 2026, 7000).
 """
 
 from datetime import date

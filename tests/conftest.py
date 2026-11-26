@@ -33,11 +33,11 @@ BOOKINGS = [
      "state_of_residence": "CA", "coverage_type": "flight_only",
      "purchase_date": date(2025, 11, 20), "departure_date": date(2026, 1, 5),
      "return_date": date(2026, 1, 12), "num_nights": 7},
-    # Purchased in 2026 and still on risk at the Valuation date (2026-09-30):
-    # 20 of its 40 days from purchase to return have passed, so half is earned.
+    # Purchased in 2026 and still on risk at the Valuation date (2026-09-30): of its 40 days from purchase
+    # to return (both included), 20 have passed by the end of the Valuation date, so half is earned.
     {"booking_id": "B4", "segment": "baseline", "destination_id": 1, "age": 50,
      "state_of_residence": "FL", "coverage_type": "hotel_only",
-     "purchase_date": date(2026, 9, 10), "departure_date": date(2026, 9, 25),
+     "purchase_date": date(2026, 9, 11), "departure_date": date(2026, 9, 25),
      "return_date": date(2026, 10, 20), "num_nights": 25},
 ]
 
@@ -74,7 +74,7 @@ PRICING_COEFFICIENTS = [
         ("frequency", "state_CA", 0.5), ("frequency", "month_1", 0.6),
         ("severity", "intercept", 4.0), ("severity", "age", 0.05), ("severity", "log_trip_cost", 0.3),
         ("severity", "product_flight", -0.2), ("severity", "post_departure", -0.5),
-        ("premium", "post_departure_share", 0.4), ("premium", "expense_load", 1.1),
+        ("premium", "expense_load", 1.1),
     ]
 ]
 

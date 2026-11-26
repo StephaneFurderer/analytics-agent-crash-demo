@@ -8,6 +8,7 @@ import json
 import pytest
 
 from compass import benchmark, exploratory
+from compass.cli import main as cli_main
 
 from test_benchmark_report import matrix_rows, nao_results, question, run_report
 
@@ -115,3 +116,39 @@ def test_an_exploratory_run_not_yet_judged_is_reported_as_such(explored):
     assert code == 0
     exploratory_part = (out / "accuracy_matrix.md").read_text().split("## Exploratory questions", 1)[1]
     assert "Ch3: not judged yet" in exploratory_part
+
+
+def test_demo_judge_scores_a_chapters_latest_exploratory_run(explored, monkeypatch):
+    tmp_path, tests_dir, results_dir = explored
+    exploratory_results(results_dir, 2, {"underperformance": ["old"]}, stamp="20261101_100000")
+    latest = exploratory_results(results_dir, 2, {"underperformance": ["Caribbean, and 2026 is immature."]})
+    # The Anthropic API is the boundary: stand a fake judge in for Claude.
+    monkeypatch.setattr(exploratory, "claude_judge",
+                        lambda: FakeJudge({"destination": "Caribbean", "immature": "immature"}))
+
+    code = cli_main(["judge", "--chapter", "2", "--results", str(results_dir), "--questions", str(tests_dir)])
+
+    assert code == 0
+    scores = json.loads(exploratory.scores_path(latest).read_text())
+    assert [s["score"] for s in scores["scores"]] == [1.0]
+
+
+def test_demo_judge_asks_for_the_api_key(explored, monkeypatch, capsys):
+    tmp_path, tests_dir, results_dir = explored
+    exploratory_results(results_dir, 2, {"underperformance": ["Caribbean."]})
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    code = cli_main(["judge", "--chapter", "2", "--results", str(results_dir), "--questions", str(tests_dir)])
+
+    assert code == 1
+    assert "ANTHROPIC_API_KEY" in capsys.readouterr().err
+    assert not list(results_dir.rglob("scores_*.json"))
+
+
+def test_demo_judge_says_when_a_chapter_has_no_exploratory_run(explored, capsys):
+    tmp_path, tests_dir, results_dir = explored
+
+    code = cli_main(["judge", "--chapter", "4", "--results", str(results_dir), "--questions", str(tests_dir)])
+
+    assert code == 1
+    assert "No Exploratory questions run for Chapter 4" in capsys.readouterr().err

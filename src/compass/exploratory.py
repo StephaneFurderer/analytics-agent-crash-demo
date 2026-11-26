@@ -118,6 +118,18 @@ def judge_run(results_file: Path, questions: dict[str, Question], judge: Judge, 
     return path
 
 
+def judge_chapter(chapter: int, results_dir: Path, tests_dir: Path, judge: Judge | None = None) -> Path:
+    """Judge the latest Exploratory run of a Chapter (Claude by default); return the scores file."""
+    from compass import benchmark
+
+    run = benchmark.latest_runs(results_dir).get((chapter, "exploratory"))
+    if run is None:
+        raise BenchmarkError(f"No Exploratory questions run for Chapter {chapter} in {results_dir}. "
+                             f"Run `uv run demo benchmark --set exploratory --chapter {chapter}` first.")
+    judge = judge or claude_judge()
+    return judge_run(run, benchmark.questions(tests_dir), judge)
+
+
 def report_lines(results_dir: Path, tests_dir: Path) -> list[str]:
     """The Exploratory questions section of `demo report`: the judge's scores of each Chapter's latest run.
 

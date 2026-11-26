@@ -7,7 +7,8 @@ Commands:
 - `chapter N`: jump to a Chapter's tag and reset the warehouse and Context layer to it
 - `chat`: open the Analytics agent (nao chat; needs ANTHROPIC_API_KEY)
 - `benchmark`: run the Benchmark questions (nao test, 3 runs each; needs ANTHROPIC_API_KEY, costs money)
-- `report`: aggregate the archived benchmark results into the Accuracy matrix and a chart
+- `judge`: score a Chapter's Exploratory questions run against the rubric with Claude (needs ANTHROPIC_API_KEY)
+- `report`: aggregate the archived benchmark results into the Accuracy matrix and a chart, plus Exploratory scores
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import sys
 from importlib import resources
 from pathlib import Path
 
-from compass import agent, benchmark, chapters, warehouse
+from compass import agent, benchmark, chapters, exploratory, warehouse
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,6 +53,12 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--project", type=Path, default=agent.PROJECT_DIR, help=argparse.SUPPRESS)
     bench.add_argument("--results", type=Path, default=benchmark.RESULTS_DIR, help="where runs are archived")
 
+    judge = commands.add_parser("judge", help="score a Chapter's Exploratory questions run with Claude as judge")
+    judge.add_argument("--chapter", type=int,
+                       help="the Chapter whose latest run to judge (default: the Chapter tag checked out)")
+    judge.add_argument("--results", type=Path, default=benchmark.RESULTS_DIR, help="archived benchmark results")
+    judge.add_argument("--questions", type=Path, default=benchmark.QUESTIONS_DIR, help="Benchmark questions")
+
     report = commands.add_parser("report", help="turn benchmark results into the Accuracy matrix and a chart")
     report.add_argument("--results", type=Path, default=benchmark.RESULTS_DIR, help="archived benchmark results")
     report.add_argument("--questions", type=Path, default=benchmark.QUESTIONS_DIR, help="Benchmark questions")
@@ -61,10 +68,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "benchmark":
         try:
             archived = benchmark.run(args.set_name, args.chapter, project=args.project, results_dir=args.results)
+            print(f"\nRun archived: {archived}")
+            if args.set_name == "exploratory":
+                chapter = int(archived.parent.parent.name.removeprefix("ch"))
+                print(f"Judged: {exploratory.judge_chapter(chapter, args.results, args.project / 'tests')}")
         except (agent.NotReady, benchmark.BenchmarkError) as problem:
             print(problem, file=sys.stderr)
             return 1
-        print(f"\nRun archived: {archived}\nNext: uv run demo report")
+        print("Next: uv run demo report")
+        return 0
+    if args.command == "judge":
+        try:
+            chapter = benchmark.current_chapter() if args.chapter is None else args.chapter
+            print(f"Judged: {exploratory.judge_chapter(chapter, args.results, args.questions)}")
+        except (agent.NotReady, benchmark.BenchmarkError) as problem:
+            print(problem, file=sys.stderr)
+            return 1
         return 0
     if args.command == "report":
         try:

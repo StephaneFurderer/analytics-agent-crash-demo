@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 from compass.generator.book import destinations_frame, generate_year
+from compass.generator.pricing import PRICING_GLM_2025, coefficients_frame
 
 VALUATION_DATE = date(2026, 9, 30)
 UNDERWRITING_YEARS = (2025,)
@@ -45,4 +46,5 @@ def generate_book(seed: int) -> dict[str, pd.DataFrame]:
         "destinations": destinations,
         "bookings": pd.concat(bookings, ignore_index=True),
         "policies": pd.concat(policies, ignore_index=True),
+        "pricing_coefficients": coefficients_frame(PRICING_GLM_2025),
     }

@@ -7,9 +7,9 @@ Each tab is a module with a `render(con, catalogue)` function. Later tabs
 import streamlit as st
 
 from compass import metrics, warehouse
-from compass.dashboard import portfolio
+from compass.dashboard import portfolio, pricing
 
-TABS = [("Portfolio", portfolio.render)]
+TABS = [("Pricing", pricing.render), ("Portfolio", portfolio.render)]
 
 st.set_page_config(page_title="Compass Assistance | Portfolio dashboard", layout="wide")
 st.title("Compass Assistance")

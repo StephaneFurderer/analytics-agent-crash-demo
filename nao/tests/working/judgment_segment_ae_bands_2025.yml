@@ -1,0 +1,12 @@
+# Replaces #11's judgment_worst_segment_2025, whose answer flipped with the seed (the 2025 segments sit at
+# A/E 0.95-1.04, within noise of each other). The defensible answer is that no segment is underperforming:
+# every segment's A/E (Ultimate over earned Pure premium) is in the adequate band.
+name: judgment_segment_ae_bands_2025
+prompt: Is any customer segment underperforming pricing in underwriting year 2025?
+tags: [tier:judgment, set:working, trap:pure_vs_commercial, trap:written_vs_earned]
+sql: |
+  SELECT segment,
+         ae_band(sum(incurred * amount_factor) / sum(pure_premium * earned_share)) AS ae_band
+  FROM metric_experience
+  WHERE underwriting_year = 2025
+  GROUP BY segment

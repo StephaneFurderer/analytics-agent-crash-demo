@@ -63,6 +63,14 @@ def generate_claims(rng: np.random.Generator, year: int, bookings: pd.DataFrame,
         "case_reserve": 0.0,
     })
     claims = claims[claims.report_date <= np.datetime64(valuation_date)]
+    return number_claims(claims, year)
+
+
+def number_claims(claims: pd.DataFrame, year: int) -> pd.DataFrame:
+    """Sort one Underwriting year's claims by report date and give them ids C<year>-000001, ..."""
+    claims = claims.drop(columns="claim_id", errors="ignore")
+    for column in ("loss_date", "report_date"):
+        claims[column] = pd.to_datetime(claims[column]).to_numpy().astype("datetime64[D]")
     claims = claims.sort_values(["report_date", "policy_id", "loss_date"], kind="stable").reset_index(drop=True)
     claims.insert(0, "claim_id", [f"C{year}-{i:06d}" for i in range(1, len(claims) + 1)])
     for column in ("loss_date", "report_date"):

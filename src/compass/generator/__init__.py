@@ -12,6 +12,7 @@ Module map:
 - `truth`: the true model (hidden ground truth, ADR 0002)
 - `book`: Bookings and Policies for one Underwriting year
 - `claims`: claims for one Underwriting year from the true model, reported by the Valuation date
+- `hurricane`: the September 2026 Gulf Coast hurricane's claims (true model; mostly reported after the Valuation date)
 """
 
 from __future__ import annotations
@@ -22,8 +23,9 @@ import numpy as np
 import pandas as pd
 
 from compass.generator.book import destinations_frame, generate_year
-from compass.generator.claims import generate_claims
-from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
+from compass.generator.claims import generate_claims, number_claims
+from compass.generator.hurricane import generate_hurricane_claims
+from compass.generator.truth import CLAIM_PROCESS, HURRICANE, TRUE_MODEL
 from compass.generator.pricing import PRICING_GLM_2025, coefficients_frame
 
 VALUATION_DATE = date(2026, 9, 30)  # must match valuation_date() in metrics/sql/05_valuation.sql
@@ -32,6 +34,7 @@ UNDERWRITING_YEARS = (2025, 2026)
 # Stream ids: append new ones, never renumber.
 STREAM_BOOKINGS = 1
 STREAM_CLAIMS = 2
+STREAM_HURRICANE = 3
 
 
 def rng_for(seed: int, year: int, stream: int) -> np.random.Generator:
@@ -44,11 +47,15 @@ def generate_book(seed: int) -> dict[str, pd.DataFrame]:
     for year in UNDERWRITING_YEARS:
         purchased_until = min(date(year, 12, 31), VALUATION_DATE)
         b, p = generate_year(rng_for(seed, year, STREAM_BOOKINGS), year, purchased_until, destinations)
-        c = generate_claims(rng_for(seed, year, STREAM_CLAIMS), year, b, p, destinations,
-                            TRUE_MODEL[year], CLAIM_PROCESS, VALUATION_DATE)
+        ordinary = generate_claims(rng_for(seed, year, STREAM_CLAIMS), year, b, p, destinations,
+                                   TRUE_MODEL[year], CLAIM_PROCESS, VALUATION_DATE)
+        # The hurricane hits trips of any Underwriting year in progress or about to depart (e.g. 2025 sales
+        # for September 2026 trips); its claims are numbered among the year's ordinary claims.
+        event = generate_hurricane_claims(rng_for(seed, year, STREAM_HURRICANE), year, b, p, destinations,
+                                          HURRICANE, VALUATION_DATE)
         bookings.append(b)
         policies.append(p)
-        claims.append(c)
+        claims.append(number_claims(pd.concat([ordinary, event], ignore_index=True), year))
     return {
         "destinations": destinations,
         "bookings": pd.concat(bookings, ignore_index=True),

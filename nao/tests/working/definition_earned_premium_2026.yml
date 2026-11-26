@@ -1,0 +1,9 @@
+# Gross premium = Commercial premium; earned evenly from purchase to return, to the Valuation date.
+# Half-run 2026 is where written and earned are furthest apart.
+name: definition_earned_premium_2026
+prompt: How much gross premium has underwriting year 2026 earned to date?
+tags: [tier:definition, set:working, trap:written_vs_earned, trap:pure_vs_commercial, trap:purchase_vs_departure]
+sql: |
+  SELECT sum(commercial_premium * earned_share) AS earned_commercial_premium
+  FROM metric_policies
+  WHERE underwriting_year = 2026

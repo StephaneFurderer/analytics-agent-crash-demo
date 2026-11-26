@@ -1,0 +1,11 @@
+# Exposure: trip cost of every Policy purchased by that date whose trip hasn't ended (return on or after it),
+# whatever its Underwriting year. Not written premium, not trips departing that day.
+name: definition_exposure_gulf_coast_landfall
+prompt: >-
+  What was our exposure in the Gulf Coast when the hurricane made landfall on 16 September 2026, and how many
+  policies were at risk?
+tags: [tier:definition, set:working]
+sql: |
+  SELECT coalesce(sum(trip_cost), 0) AS exposure, count(policy_id) AS policies_at_risk
+  FROM metric_exposure(DATE '2026-09-16')
+  WHERE destination_region = 'gulf_coast'

@@ -1,0 +1,9 @@
+# A share of Bookings, not of Policies: counted per policy row, hotel-and-flight Bookings weigh double.
+name: definition_dual_cover_share_2025
+prompt: What fraction of underwriting year 2025 bookings have both hotel and flight cover?
+tags: [tier:definition, set:working, trap:booking_vs_policy]
+sql: |
+  SELECT count(DISTINCT booking_id) FILTER (WHERE coverage_type = 'hotel_and_flight')
+         / count(DISTINCT booking_id) AS dual_cover_fraction
+  FROM metric_policies
+  WHERE underwriting_year = 2025

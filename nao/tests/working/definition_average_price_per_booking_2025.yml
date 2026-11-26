@@ -1,0 +1,9 @@
+# What the customer pays is the Commercial premium, summed over the Booking's Policies; averaging over
+# policy rows understates it.
+name: definition_average_price_per_booking_2025
+prompt: What did customers pay on average per booking in underwriting year 2025?
+tags: [tier:definition, set:working, trap:booking_vs_policy, trap:pure_vs_commercial]
+sql: |
+  SELECT sum(commercial_premium) / count(DISTINCT booking_id) AS average_commercial_premium_per_booking
+  FROM metric_policies
+  WHERE underwriting_year = 2025

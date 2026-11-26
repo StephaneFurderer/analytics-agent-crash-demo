@@ -45,6 +45,7 @@ The demo shows actuarial leaders, and hands-on actuaries following along, how to
   - The Legacy dashboard uses the standard development factors from the start. Chapter 5 adds the actuary's review and the hurricane loading.
   - Claims have no development: a claim is paid in full when reported, so case reserves are always zero. The only reserves are IBNR. The full standard vocabulary is kept: Incurred = Paid + Case reserve (= Paid in this demo), and Ultimate = Incurred + IBNR. This keeps the demo focused on a small set of metrics.
   - IBNR is the expected amount to be paid on claims not yet reported, estimated at the portfolio level rather than per claim. It is the demo's only Reserve.
+  - Development factors (and the hurricane loading) are selected for both claim counts and claim amounts, so IBNR has an expected count and an expected amount. Ultimate frequency and severity then split A/E correctly.
   - Actual for A/E is Ultimate.
   - Ticket 12 (Held-out set) is written by the user (`ready-for-human`).
 - **Deferred to build time:** Q15 (which precomputed tables to keep, to be revisited while building).

@@ -98,6 +98,10 @@ _Avoid_: Provision, liability
 The final value of an **Underwriting year**'s claims once every claim has been reported: **Incurred** plus **IBNR**.
 _Avoid_: Final losses, projected losses
 
+**Development factor**:
+The ratio of **Ultimate** to **Incurred** for an **Underwriting year** at a given maturity. It is selected separately for claim counts and claim amounts, so **IBNR** has both an expected number of claims and an expected amount.
+_Avoid_: LDF, multiplier
+
 **Expert judgment**:
 An assumption an actuary chooses where the data alone cannot decide, such as how an immature **Underwriting year** will develop.
 _Avoid_: Override, gut feel

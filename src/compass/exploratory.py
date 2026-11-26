@@ -116,3 +116,43 @@ def judge_run(results_file: Path, questions: dict[str, Question], judge: Judge, 
     path.write_text(json.dumps({"results_file": results_file.name, "judge_model": model, "scores": scores},
                                indent=2))
     return path
+
+
+def report_lines(results_dir: Path, tests_dir: Path) -> list[str]:
+    """The Exploratory questions section of `demo report`: the judge's scores of each Chapter's latest run.
+
+    Per question, a score row (mean share of rubric criteria met over the runs) and one row per
+    criterion (runs that met it, out of the runs).
+    """
+    from compass import benchmark
+
+    known = benchmark.questions(tests_dir)
+    runs = {c: p for (c, s), p in benchmark.latest_runs(results_dir).items() if s == "exploratory"}
+    judged, lines = {}, []
+    for chapter, results_file in sorted(runs.items()):
+        path = scores_path(results_file)
+        if path.exists():
+            judged[chapter] = json.loads(path.read_text())
+        else:
+            lines.append(f"Ch{chapter}: not judged yet ({results_file.name}).")
+    if not judged:
+        return lines or ["Not run yet."]
+
+    chapters = sorted(judged)
+    header = ["Question / criterion", *(f"Ch{c}" for c in chapters)]
+    table = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
+    names = sorted({s["question"] for data in judged.values() for s in data["scores"] if s["question"] in known})
+    for name in names:
+        of_question = {c: [s for s in judged[c]["scores"] if s["question"] == name] for c in chapters}
+        cells = [f"{sum(s['score'] for s in got) / len(got):.0%}" if got else "–" for got in of_question.values()]
+        table.append("| " + " | ".join([f"{name} (score)", *cells]) + " |")
+        for criterion in known[name].rubric:
+            cells = []
+            for got in of_question.values():
+                met = sum(v["met"] for s in got for v in s["criteria"] if v["id"] == criterion.id)
+                cells.append(f"{met}/{len(got)}" if got else "–")
+            table.append("| " + " | ".join([f"{name}: {criterion.id}", *cells]) + " |")
+    models = sorted({data.get("judge_model", "?") for data in judged.values()})
+    intro = [f"Judged by {', '.join(models)} against each question's rubric (`nao/tests/exploratory/`). "
+             "Score: share of rubric criteria met, averaged over the runs. Not part of Accuracy.", ""]
+    return [*intro, *table, *([""] + lines if lines else [])]

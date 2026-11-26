@@ -82,3 +82,36 @@ def test_the_judge_sees_the_rubric_and_the_answer_and_its_prompt_and_scores_are_
     assert {c["id"]: c["met"] for c in first["criteria"]} == {"destination": True, "immature": False}
     assert first["score"] == 0.5
     assert second["score"] == 0.0
+
+
+def test_demo_report_shows_exploratory_scores_in_their_own_section_and_not_in_accuracy(explored):
+    tmp_path, tests_dir, results_dir = explored
+    nao_results(results_dir, 2, "working", {"policy_count": [True, True, True]})
+    run = exploratory_results(results_dir, 2, {"underperformance": [
+        "Caribbean is up and 2026 is immature.", "Caribbean is up.", "Prices are too low."]})
+    exploratory.judge_run(run, benchmark.questions(tests_dir),
+                          FakeJudge({"destination": "Caribbean", "immature": "immature"}))
+
+    code, out = run_report(tmp_path, tests_dir, results_dir)
+
+    assert code == 0
+    markdown = (out / "accuracy_matrix.md").read_text()
+    accuracy, exploratory_part = markdown.split("## Exploratory questions", 1)
+    assert matrix_rows(accuracy, "Working set")[1]["All"] == ["100%"]
+    assert "underperformance" not in accuracy
+    header, rows = matrix_rows(markdown, "## Exploratory questions")
+    assert header[1:] == ["Ch2"]
+    assert rows["underperformance (score)"] == ["50%"]  # (2 + 1 + 0) of 2 criteria x 3 runs
+    assert rows["underperformance: destination"] == ["2/3"]
+    assert rows["underperformance: immature"] == ["1/3"]
+
+
+def test_an_exploratory_run_not_yet_judged_is_reported_as_such(explored):
+    tmp_path, tests_dir, results_dir = explored
+    exploratory_results(results_dir, 3, {"underperformance": ["Caribbean."]})
+
+    code, out = run_report(tmp_path, tests_dir, results_dir)
+
+    assert code == 0
+    exploratory_part = (out / "accuracy_matrix.md").read_text().split("## Exploratory questions", 1)[1]
+    assert "Ch3: not judged yet" in exploratory_part

@@ -2,7 +2,7 @@
 # (Ultimate over earned Commercial premium, not Paid over written premium).
 name: definition_loss_ratio_2025
 prompt: What is the loss ratio of underwriting year 2025?
-tags: [tier:definition, set:working]
+tags: [tier:definition, set:working, trap:pure_vs_commercial, trap:written_vs_earned]
 sql: |
   SELECT sum(incurred * amount_factor) / sum(commercial_premium * earned_share) AS loss_ratio
   FROM metric_experience

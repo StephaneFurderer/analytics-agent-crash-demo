@@ -1,0 +1,9 @@
+# Expert judgment: only 5 of ~147 hurricane claims were reported by the Valuation date, and the standard
+# Development factors don't see the event. Ultimate with loading adds the Hurricane loading.
+name: judgment_ultimate_with_hurricane_2026
+prompt: What's our best estimate of underwriting year 2026's ultimate once the September hurricane is allowed for?
+tags: [tier:judgment, set:working, trap:expert_judgment, trap:immature_year]
+sql: |
+  SELECT sum(incurred * amount_factor + loading_amount) AS ultimate_with_loading
+  FROM metric_experience_loaded
+  WHERE underwriting_year = 2026

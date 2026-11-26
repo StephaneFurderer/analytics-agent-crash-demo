@@ -1,0 +1,10 @@
+# The Hurricane loading itself: the event's claims not yet in Ultimate, per Policy at risk in the Gulf
+# Coast at landfall (counts) and per unit of Exposure (amounts).
+name: judgment_hurricane_loading_2026
+prompt: >-
+  How many claims, and how much, should we add to the 2026 ultimate for the September Gulf Coast hurricane?
+tags: [tier:judgment, set:working, trap:expert_judgment]
+sql: |
+  SELECT sum(loading_claims) AS hurricane_loading_claim_count, sum(loading_amount) AS hurricane_loading
+  FROM metric_experience_loaded
+  WHERE underwriting_year = 2026

@@ -1,0 +1,9 @@
+# Every trap at once on the immature year: Ultimate (not Paid) over earned (not written) Commercial
+# premium, on the purchase cohort.
+name: judgment_loss_ratio_2026
+prompt: What is the loss ratio for underwriting year 2026?
+tags: [tier:judgment, set:working, trap:immature_year, trap:expert_judgment, trap:pure_vs_commercial, trap:written_vs_earned, trap:purchase_vs_departure]
+sql: |
+  SELECT sum(incurred * amount_factor) / sum(commercial_premium * earned_share) AS loss_ratio
+  FROM metric_experience
+  WHERE underwriting_year = 2026

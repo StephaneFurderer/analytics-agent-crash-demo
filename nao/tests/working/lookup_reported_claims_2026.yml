@@ -1,0 +1,8 @@
+# Claims belong to their Policy's Underwriting year (purchase date), not to the year of the loss date.
+name: lookup_reported_claims_2026
+prompt: How many claims have been reported on underwriting year 2026 so far, and how much have we paid on them?
+tags: [tier:lookup, set:working, trap:purchase_vs_departure]
+sql: |
+  SELECT count(claim_id) AS reported_claim_count, coalesce(sum(paid_amount), 0) AS paid
+  FROM metric_claims
+  WHERE underwriting_year = 2026

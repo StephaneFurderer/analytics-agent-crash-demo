@@ -2,7 +2,7 @@
 # (earned to the Valuation date, not written).
 name: definition_earned_pure_premium_2025
 prompt: How much pure premium has underwriting year 2025 earned?
-tags: [tier:definition, set:working]
+tags: [tier:definition, set:working, trap:written_vs_earned]
 sql: |
   SELECT sum(pure_premium * earned_share) AS earned_pure_premium
   FROM metric_policies

@@ -1,0 +1,11 @@
+# Expert judgment: the Hurricane loading for the September 2026 Gulf Coast storm, on top of Ultimate
+# (asked for explicitly). Expected to fail until Chapter 5 adds the loading to the context.
+name: judgment_region_ae_with_hurricane_2026
+prompt: Allowing for the September hurricane, what is each destination region's A/E for underwriting year 2026?
+tags: [tier:judgment, set:working, trap:geographic_ae, trap:expert_judgment, trap:immature_year]
+sql: |
+  SELECT destination_region,
+         sum(incurred * amount_factor + loading_amount) / sum(pure_premium * earned_share) AS ae_with_loading
+  FROM metric_experience_loaded
+  WHERE underwriting_year = 2026
+  GROUP BY destination_region

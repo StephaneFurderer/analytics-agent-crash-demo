@@ -1,0 +1,11 @@
+# The geographic A/E view the Legacy dashboard never built (user story 54): the destination Drift shows
+# here (Caribbean and Gulf Coast well above 1). Actual is Ultimate, developed with the standard
+# Development factors, because 2026 is immature; without the Hurricane loading (not stated).
+name: judgment_ae_by_region_2026
+prompt: How is each destination region performing against pricing in underwriting year 2026?
+tags: [tier:judgment, set:working, trap:geographic_ae, trap:immature_year, trap:expert_judgment, trap:pure_vs_commercial]
+sql: |
+  SELECT destination_region, sum(incurred * amount_factor) / sum(pure_premium * earned_share) AS ae
+  FROM metric_experience
+  WHERE underwriting_year = 2026
+  GROUP BY destination_region

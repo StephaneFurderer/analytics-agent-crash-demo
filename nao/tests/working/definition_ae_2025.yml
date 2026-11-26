@@ -1,0 +1,9 @@
+# A/E = Ultimate over Expected on the Pricing basis: earned Pure premium, not Commercial (that's the
+# Loss ratio) and not written.
+name: definition_ae_2025
+prompt: What is the A/E for underwriting year 2025?
+tags: [tier:definition, set:working, trap:pure_vs_commercial, trap:written_vs_earned]
+sql: |
+  SELECT sum(incurred * amount_factor) / sum(pure_premium * earned_share) AS ae
+  FROM metric_experience
+  WHERE underwriting_year = 2025

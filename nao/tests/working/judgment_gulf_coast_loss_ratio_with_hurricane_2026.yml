@@ -1,0 +1,10 @@
+# Loss ratio with loading for the region the storm hit: Ultimate plus Hurricane loading over earned
+# Commercial premium.
+name: judgment_gulf_coast_loss_ratio_with_hurricane_2026
+prompt: What is the Gulf Coast's loss ratio for underwriting year 2026 once the hurricane is allowed for?
+tags: [tier:judgment, set:working, trap:expert_judgment, trap:immature_year, trap:pure_vs_commercial]
+sql: |
+  SELECT sum(incurred * amount_factor + loading_amount) / sum(commercial_premium * earned_share)
+         AS loss_ratio_with_loading
+  FROM metric_experience_loaded
+  WHERE underwriting_year = 2026 AND destination_region = 'gulf_coast'

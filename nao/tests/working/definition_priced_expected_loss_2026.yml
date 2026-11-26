@@ -1,0 +1,9 @@
+# The expected loss priced into a Policy is its Pure premium (Pricing basis), before loadings; "written"
+# means the whole premium of the Policies sold, not the earned part.
+name: definition_priced_expected_loss_2026
+prompt: What expected loss did we price into the policies written in underwriting year 2026?
+tags: [tier:definition, set:working, trap:pure_vs_commercial, trap:written_vs_earned, trap:purchase_vs_departure]
+sql: |
+  SELECT sum(pure_premium) AS written_pure_premium
+  FROM metric_policies
+  WHERE underwriting_year = 2026

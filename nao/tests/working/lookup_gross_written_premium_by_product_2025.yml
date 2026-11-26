@@ -1,0 +1,9 @@
+# "Gross premium" is what the customer pays: the Commercial premium, not the Pure premium.
+name: lookup_gross_written_premium_by_product_2025
+prompt: What gross written premium did each product bring in for underwriting year 2025?
+tags: [tier:lookup, set:working, trap:pure_vs_commercial]
+sql: |
+  SELECT product, sum(commercial_premium) AS written_commercial_premium
+  FROM metric_policies
+  WHERE underwriting_year = 2025
+  GROUP BY product

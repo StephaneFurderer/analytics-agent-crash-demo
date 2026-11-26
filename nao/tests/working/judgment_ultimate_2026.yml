@@ -1,0 +1,9 @@
+# 2026 is immature: Ultimate = Incurred + IBNR from the Development factors, by Maturity. Incurred alone
+# treats the year as final. No Hurricane loading unless stated.
+name: judgment_ultimate_2026
+prompt: What is the ultimate for underwriting year 2026?
+tags: [tier:judgment, set:working, trap:immature_year, trap:expert_judgment]
+sql: |
+  SELECT sum(incurred * amount_factor) AS ultimate
+  FROM metric_experience
+  WHERE underwriting_year = 2026

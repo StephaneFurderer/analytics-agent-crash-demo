@@ -1,0 +1,8 @@
+# A Booking holds one or two Policies: counting policy rows double-counts every hotel-and-flight Booking.
+name: lookup_booking_count_2025
+prompt: How many bookings did we sell in underwriting year 2025?
+tags: [tier:lookup, set:working, trap:booking_vs_policy, trap:purchase_vs_departure]
+sql: |
+  SELECT count(DISTINCT booking_id) AS booking_count
+  FROM metric_policies
+  WHERE underwriting_year = 2025

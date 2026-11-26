@@ -1,0 +1,10 @@
+# IBNR comes from the Development factors (counts and amounts selected separately), summed over
+# Maturities; the agent must not invent its own development.
+name: judgment_ibnr_2026
+prompt: How much IBNR should we hold for underwriting year 2026, and for how many claims?
+tags: [tier:judgment, set:working, trap:immature_year, trap:expert_judgment]
+sql: |
+  SELECT sum(incurred * (amount_factor - 1)) AS ibnr,
+         sum(reported_claims * (count_factor - 1)) AS ibnr_claim_count
+  FROM metric_experience
+  WHERE underwriting_year = 2026

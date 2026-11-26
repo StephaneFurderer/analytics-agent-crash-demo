@@ -1,0 +1,10 @@
+# Underwriting year is the purchase year: filtering on departure year adds ~13k Policies bought in 2025
+# for 2026 trips and drops 2026 purchases departing in 2027.
+name: lookup_policy_count_by_region_2026
+prompt: How many policies does underwriting year 2026 have in each destination region?
+tags: [tier:lookup, set:working, trap:purchase_vs_departure]
+sql: |
+  SELECT destination_region, count(policy_id) AS policy_count
+  FROM metric_policies
+  WHERE underwriting_year = 2026
+  GROUP BY destination_region

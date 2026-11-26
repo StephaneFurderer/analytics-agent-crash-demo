@@ -1,0 +1,11 @@
+# Underwriting year 2025 includes ~600 claims with a 2026 loss date (trips bought in 2025, taken in 2026).
+name: lookup_claims_by_type_2025
+prompt: >-
+  For underwriting year 2025, how many claims were cancellations before departure and how many happened
+  during the trip?
+tags: [tier:lookup, set:working, trap:purchase_vs_departure]
+sql: |
+  SELECT claim_type, count(claim_id) AS reported_claim_count
+  FROM metric_claims
+  WHERE underwriting_year = 2025
+  GROUP BY claim_type

@@ -1,0 +1,9 @@
+# Coverage type is a Booking attribute: a hotel-and-flight Booking has two Policies but is one Booking.
+name: lookup_bookings_by_coverage_2026
+prompt: In underwriting year 2026, how many bookings bought hotel cover only, flight cover only, and both?
+tags: [tier:lookup, set:working, trap:booking_vs_policy, trap:purchase_vs_departure]
+sql: |
+  SELECT coverage_type, count(DISTINCT booking_id) AS booking_count
+  FROM metric_policies
+  WHERE underwriting_year = 2026
+  GROUP BY coverage_type

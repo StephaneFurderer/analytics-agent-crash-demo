@@ -5,12 +5,26 @@ warehouse and the Context layer to it (see the README).
 
 ## Naming
 
-`chapter-N`, where N is 0 to 7. One tag per Chapter. `demo chapter N` accepts only annotated tags.
+`chN-<slug>`, exactly one annotated tag per Chapter. `demo chapter N` resolves the single annotated tag matching
+`chN-*` and refuses if there are none or several (lightweight tags are ignored).
+
+| Ch | Tag |
+|---|---|
+| 0 | `ch0-setup` |
+| 1 | `ch1-legacy-dashboard` |
+| 2 | `ch2-raw-schema` |
+| 3 | `ch3-rules` |
+| 4 | `ch4-business-glossary` |
+| 5 | `ch5-expert-judgment` |
+| 6 | `ch6-metric-layer` |
+| 7 | `ch7-trust` |
+
+Re-cut a tag under the same name; never leave an old and a new tag for one Chapter side by side.
 
 ## Annotation convention
 
 The tag message is what a follower reads instead of watching the video. `demo chapter N` prints it after the jump,
-and `git tag -n99 chapter-N` or `git show chapter-N` shows it at any time. Use this shape:
+and `git tag -n99 ch3-rules` or `git show ch3-rules` shows it at any time. Use this shape:
 
 ```
 Chapter N: <title>
@@ -38,8 +52,8 @@ Benchmark: <date>, <model>, <cost reported by nao test>
 Create a tag with the message in a file, so the table stays intact:
 
 ```sh
-git tag -a chapter-3 -F chapter-3.txt          # first cut
-git tag -a -f chapter-3 -F chapter-3.txt <sha> # re-cut (before publishing only)
+git tag -a ch3-rules -F ch3.txt          # first cut
+git tag -a -f ch3-rules -F ch3.txt <sha> # re-cut (before publishing only)
 ```
 
 ## Tag policy
@@ -49,4 +63,4 @@ git tag -a -f chapter-3 -F chapter-3.txt <sha> # re-cut (before publishing only)
 - **Once a chapter is recorded and published, its tag is frozen.** It is never moved or deleted, and `main` is no
   longer rewritten before it. Later fixes are new commits on `main`; if a fix matters to followers, say so in the
   README rather than moving the tag. This keeps followers' clones and links working.
-- Pushing a re-cut tag needs `git push --force origin chapter-N`. After publishing, never do that.
+- Pushing a re-cut tag needs `git push --force origin <tag>`. After publishing, never do that.

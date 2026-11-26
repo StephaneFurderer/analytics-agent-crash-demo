@@ -61,11 +61,11 @@ def main(argv: list[str] | None = None) -> int:
             Path(os.environ[warehouse.PATH_ENV]) if warehouse.PATH_ENV in os.environ else args.repo / warehouse.DEFAULT_PATH
         )
         try:
-            annotation = chapters.jump(args.repo, args.number, path, force=args.force)
+            tag, annotation = chapters.jump(args.repo, args.number, path, force=args.force)
         except chapters.ChapterError as error:
             print(error, file=sys.stderr)
             return 1
-        print(f"Now on {chapters.tag_name(args.number)}; warehouse rebuilt at {path}.\n\n{annotation}")
+        print(f"Now on {tag}; warehouse rebuilt at {path}.\n\n{annotation}")
         return 0
     return 2
 

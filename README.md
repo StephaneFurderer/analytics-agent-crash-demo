@@ -56,19 +56,19 @@ Never commit it.
 
 ## Chapters
 
-Each Chapter is an annotated git tag, `chapter-0` to `chapter-7`. Its annotation says what the Chapter adds and
-gives its Accuracy matrix: read it with `git show chapter-N`.
+Each Chapter is one annotated git tag named `chN-<slug>`. Its annotation says what the Chapter adds and gives its
+Accuracy matrix: read it with `git show <tag>`.
 
-| Ch | Content | Context layer |
-|---|---|---|
-| 0 | Setup | none |
-| 1 | The Legacy dashboard and the pain point | none |
-| 2 | Agent on the raw schema | synced table metadata only |
-| 3 | Plus Rules and annotations | Rules, per-table annotations |
-| 4 | Plus the Business glossary | the Business glossary as a context document |
-| 5 | Expert judgment | the actuary's development factors, hurricane loading, Rules on immaturity |
-| 6 | Metric layer | the Metric layer definitions |
-| 7 | Trust and the Ripple effect | Held-out set, regression suite, a coding agent refitting the pricing GLM |
+| Ch | Tag | Content | Context layer |
+|---|---|---|---|
+| 0 | `ch0-setup` | Setup | none |
+| 1 | `ch1-legacy-dashboard` | The Legacy dashboard and the pain point | none |
+| 2 | `ch2-raw-schema` | Agent on the raw schema | synced table metadata only |
+| 3 | `ch3-rules` | Plus Rules and annotations | Rules, per-table annotations |
+| 4 | `ch4-business-glossary` | Plus the Business glossary | the Business glossary as a context document |
+| 5 | `ch5-expert-judgment` | Expert judgment | the actuary's development factors, hurricane loading, Rules on immaturity |
+| 6 | `ch6-metric-layer` | Metric layer | the Metric layer definitions |
+| 7 | `ch7-trust` | Trust and the Ripple effect | Held-out set, regression suite, a coding agent refitting the pricing GLM |
 
 The tags are cut while the demo is recorded; until then, `demo chapter N` reports which chapters exist.
 
@@ -80,7 +80,7 @@ uv run demo chapter 3
 
 This
 
-1. checks out the tag `chapter-3` (a detached HEAD). The Context layer is versioned, so the checkout puts it in
+1. checks out the tag `ch3-rules`, the one annotated tag matching `ch3-*` (a detached HEAD). The Context layer is versioned, so the checkout puts it in
    exactly that chapter's state: you never see context from a later chapter;
 2. rebuilds the warehouse from the seed with that chapter's code;
 3. prints the chapter's annotation.
@@ -90,7 +90,7 @@ chapter. Commit or stash them first, or use `uv run demo chapter 3 --force` to d
 untracked files too, but keeps ignored ones such as `.venv/` and the warehouse.
 
 Go back to the latest version with `git switch main && uv run demo reset`. Compare two chapters with
-`git diff chapter-3 chapter-4` (add `--stat` for a list of changed context files).
+`git diff ch3-rules ch4-business-glossary` (add `--stat` for a list of changed context files).
 
 Run the commands from the repo root. The tag policy (tags are re-cut until recording, then frozen) and the
 annotation convention are in [docs/chapters.md](docs/chapters.md).

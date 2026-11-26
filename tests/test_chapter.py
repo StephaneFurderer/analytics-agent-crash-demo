@@ -25,7 +25,7 @@ def repo(tmp_path):
     (repo / "RULES.md").write_text("Chapter 3 rules\n")
     git(repo, "add", ".")
     git(repo, "commit", "-q", "-m", "Rules and annotations")
-    git(repo, "tag", "-a", "chapter-3", "-m", "Chapter 3: Rules and annotations\n\nAccuracy matrix: Lookup 90%")
+    git(repo, "tag", "-a", "ch3-rules", "-m", "Chapter 3: Rules and annotations\n\nAccuracy matrix: Lookup 90%")
     (repo / "RULES.md").write_text("Chapter 4 rules\n")
     (repo / "glossary.md").write_text("Business glossary\n")
     git(repo, "add", ".")
@@ -42,7 +42,7 @@ def test_chapter_checks_out_the_tag_and_rebuilds_the_warehouse(repo, tmp_path, c
 
     assert (repo / "RULES.md").read_text() == "Chapter 3 rules\n"
     assert not (repo / "glossary.md").exists()
-    assert git(repo, "rev-parse", "HEAD") == git(repo, "rev-parse", "chapter-3^{commit}")
+    assert git(repo, "rev-parse", "HEAD") == git(repo, "rev-parse", "ch3-rules^{commit}")
     assert git(repo, "status", "--porcelain") == ""
     con = warehouse.connect(path)
     assert metrics.query(con, ["booking_count"]).loc[0, "booking_count"] > 0
@@ -76,5 +76,32 @@ def test_chapter_without_a_tag_lists_the_available_chapters(repo, tmp_path, caps
     assert cli.main(["chapter", "5", "--repo", str(repo), "--path", str(tmp_path / "w.duckdb")]) == 1
 
     err = capsys.readouterr().err
-    assert "chapter-5" in err and "chapter-3" in err
+    assert "ch5-*" in err and "ch3-rules" in err
     assert not (tmp_path / "w.duckdb").exists()
+
+
+def test_chapter_number_does_not_match_a_longer_number(repo, tmp_path, capsys):
+    git(repo, "tag", "-a", "ch13-extra", "-m", "not chapter 1")
+
+    assert cli.main(["chapter", "1", "--repo", str(repo), "--path", str(tmp_path / "w.duckdb")]) == 1
+
+    assert "ch1-*" in capsys.readouterr().err
+
+
+def test_chapter_with_several_matching_tags_is_refused(repo, tmp_path, capsys):
+    git(repo, "tag", "-a", "ch3-rules-recut", "-m", "a second Chapter 3")
+    head = git(repo, "rev-parse", "HEAD")
+
+    assert cli.main(["chapter", "3", "--repo", str(repo), "--path", str(tmp_path / "w.duckdb")]) == 1
+
+    err = capsys.readouterr().err
+    assert "ch3-rules" in err and "ch3-rules-recut" in err
+    assert git(repo, "rev-parse", "HEAD") == head
+
+
+def test_chapter_ignores_lightweight_tags(repo, tmp_path, capsys):
+    git(repo, "tag", "ch4-business-glossary")
+
+    assert cli.main(["chapter", "4", "--repo", str(repo), "--path", str(tmp_path / "w.duckdb")]) == 1
+
+    assert "ch4-*" in capsys.readouterr().err

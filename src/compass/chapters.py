@@ -1,6 +1,6 @@
 """Chapter navigation: jump to a Chapter's annotated tag and reset to its state.
 
-A Chapter is the annotated tag `chapter-N` (see docs/chapters.md). Jumping to it
+A Chapter is the single annotated tag `chN-<slug>`, e.g. `ch3-rules` (see docs/chapters.md). Jumping to it
 1. checks out the tag (detached HEAD). The Context layer is versioned, so the
    checkout itself puts the Context layer in the chapter's state;
 2. rebuilds the warehouse from the seed with the chapter's own code, in a fresh
@@ -14,23 +14,33 @@ import subprocess
 import sys
 from pathlib import Path
 
-TAG_PREFIX = "chapter-"
 
 
 class ChapterError(Exception):
     """A chapter jump that was refused; nothing was changed."""
 
 
-def tag_name(chapter: int) -> str:
-    return f"{TAG_PREFIX}{chapter}"
+def pattern(chapter: int) -> str:
+    return f"ch{chapter}-*"
 
 
-def jump(repo: Path, chapter: int, warehouse_path: Path, *, force: bool = False) -> str:
-    """Check out chapter `chapter` in `repo`, rebuild the warehouse, return the tag annotation."""
-    tag = tag_name(chapter)
-    if _git(repo, "rev-parse", "-q", "--verify", f"refs/tags/{tag}^{{tag}}", check=False).returncode != 0:
-        available = ", ".join(available_chapters(repo)) or "none"
-        raise ChapterError(f"No annotated tag {tag}. Chapters available: {available}.")
+def find_tag(repo: Path, chapter: int) -> str:
+    """The one annotated tag for `chapter`; refuse if there are none or several."""
+    matches = _annotated_tags(repo, pattern(chapter))
+    if not matches:
+        available = ", ".join(_annotated_tags(repo, "ch*-*")) or "none"
+        raise ChapterError(f"No annotated tag matching {pattern(chapter)}. Chapter tags available: {available}.")
+    if len(matches) > 1:
+        raise ChapterError(
+            f"Several annotated tags match {pattern(chapter)}: {', '.join(matches)}. "
+            "There must be exactly one per Chapter (see docs/chapters.md)."
+        )
+    return matches[0]
+
+
+def jump(repo: Path, chapter: int, warehouse_path: Path, *, force: bool = False) -> tuple[str, str]:
+    """Check out chapter `chapter` in `repo`, rebuild the warehouse, return (tag, annotation)."""
+    tag = find_tag(repo, chapter)
 
     dirty = _git(repo, "status", "--porcelain").stdout.strip()
     if dirty and not force:
@@ -47,12 +57,12 @@ def jump(repo: Path, chapter: int, warehouse_path: Path, *, force: bool = False)
     _git(repo, "checkout", "-q", "--detach", tag)
 
     _reset_warehouse(repo, warehouse_path)
-    return _git(repo, "tag", "-l", "--format=%(contents)", tag).stdout.strip()
+    return tag, _git(repo, "tag", "-l", "--format=%(contents)", tag).stdout.strip()
 
 
-def available_chapters(repo: Path) -> list[str]:
-    tags = _git(repo, "tag", "-l", f"{TAG_PREFIX}*", check=False).stdout.split()
-    return sorted(tags, key=lambda t: int(t.removeprefix(TAG_PREFIX)) if t.removeprefix(TAG_PREFIX).isdigit() else 999)
+def _annotated_tags(repo: Path, glob: str) -> list[str]:
+    refs = _git(repo, "for-each-ref", "--format=%(objecttype) %(refname:short)", f"refs/tags/{glob}").stdout
+    return sorted(name for kind, name in (line.split(" ", 1) for line in refs.splitlines()) if kind == "tag")
 
 
 def _reset_warehouse(repo: Path, warehouse_path: Path) -> None:

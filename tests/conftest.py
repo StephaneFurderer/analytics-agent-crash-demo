@@ -54,6 +54,17 @@ POLICIES = [
      "pure_premium": 40.00, "commercial_premium": 44.40},
 ]
 
+# Claims are paid in full when reported, so every Case reserve is zero.
+# Only claims reported by the Valuation date exist.
+CLAIMS = [
+    {"claim_id": "C1", "policy_id": "B1-H", "claim_type": "pre_departure", "loss_date": date(2025, 1, 20),
+     "report_date": date(2025, 1, 25), "paid_amount": 4000.00, "case_reserve": 0.0},
+    {"claim_id": "C2", "policy_id": "B1-F", "claim_type": "post_departure", "loss_date": date(2025, 2, 10),
+     "report_date": date(2025, 3, 15), "paid_amount": 250.00, "case_reserve": 0.0},
+    {"claim_id": "C3", "policy_id": "B2-H", "claim_type": "post_departure", "loss_date": date(2025, 7, 2),
+     "report_date": date(2025, 8, 1), "paid_amount": 300.00, "case_reserve": 0.0},
+]
+
 
 @pytest.fixture(scope="session")
 def full_warehouse(tmp_path_factory):
@@ -71,7 +82,7 @@ def full_con(full_warehouse):
 @pytest.fixture
 def tiny_book(tmp_path):
     path = tmp_path / "tiny.duckdb"
-    warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES)
+    warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES, claims=CLAIMS)
     con = warehouse.connect(path)
     yield con
     con.close()

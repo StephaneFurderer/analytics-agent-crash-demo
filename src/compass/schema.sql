@@ -33,3 +33,15 @@ CREATE TABLE policies (
     pure_premium       DOUBLE  NOT NULL,
     commercial_premium DOUBLE  NOT NULL
 );
+
+-- Claims reported by the Valuation date. A claim is paid in full when it is
+-- reported, so case_reserve is always zero.
+CREATE TABLE claims (
+    claim_id     VARCHAR PRIMARY KEY,
+    policy_id    VARCHAR NOT NULL REFERENCES policies (policy_id),
+    claim_type   VARCHAR NOT NULL CHECK (claim_type IN ('pre_departure', 'post_departure')),
+    loss_date    DATE    NOT NULL,
+    report_date  DATE    NOT NULL,
+    paid_amount  DOUBLE  NOT NULL,
+    case_reserve DOUBLE  NOT NULL DEFAULT 0
+);

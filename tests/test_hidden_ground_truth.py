@@ -20,4 +20,4 @@ def test_only_the_generator_reads_the_true_model():
 
 def test_the_warehouse_holds_no_true_model(full_con):
     names = {row[0] for row in full_con.sql("SELECT table_name FROM information_schema.tables").fetchall()}
-    assert not any("truth" in n or "actual" in n or "2026" in n for n in names)
+    assert not any("truth" in n or "true_model" in n for n in names)

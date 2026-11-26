@@ -17,8 +17,8 @@ _Avoid_: Contract, cover, booking
 ### Experience vs assumptions
 
 **Actual**:
-The claims experience of an **Underwriting year** as at the **Valuation date**, taken as its **Ultimate**: **Paid** plus **IBNR**.
-_Avoid_: Real, observed, incurred
+The claims experience of an **Underwriting year** as at the **Valuation date**, taken as its **Ultimate**: **Incurred** plus **IBNR**.
+_Avoid_: Real, observed
 
 **Expected**:
 The value implied by an assumption set. It is on the **Pricing basis** unless the **Forecast basis** is stated.
@@ -71,20 +71,28 @@ The calendar year of a booking's purchase date.
 _Avoid_: Cohort year, policy year, departure year
 
 **Development**:
-The growth of an **Underwriting year**'s **Paid** claims over time as late claims are reported, until they reach **Ultimate**.
+The growth of an **Underwriting year**'s **Incurred** claims over time as late claims are reported, until they reach **Ultimate**. In this demo, development comes only from late reporting, never from changes to **Case reserves**.
 _Avoid_: Emergence, run-off
 
 **Paid**:
-Claims paid as at the **Valuation date**. A claim is paid in full when it is reported, so paid and reported claims are the same.
-_Avoid_: Reported losses, settled, observed
+The amount paid on reported claims as at the **Valuation date**.
+_Avoid_: Settled, observed
+
+**Case reserve**:
+The amount set aside for a reported claim that has not been paid yet. In this demo a claim is paid in full when it is reported, so case reserves are always zero.
+_Avoid_: Outstanding, claim reserve
+
+**Incurred**:
+**Paid** plus **Case reserve** on reported claims. Because case reserves are always zero in this demo, Incurred equals Paid.
+_Avoid_: Reported losses
 
 **IBNR**:
 The estimate of claims incurred on or before the **Valuation date** but not yet reported by it.
 _Avoid_: Reserve, development
 
 **Ultimate**:
-The final value of an **Underwriting year**'s claims once every claim has been reported: **Paid** plus **IBNR**.
-_Avoid_: Incurred, final losses, projected losses
+The final value of an **Underwriting year**'s claims once every claim has been reported: **Incurred** plus **IBNR**.
+_Avoid_: Final losses, projected losses
 
 **Expert judgment**:
 An assumption an actuary chooses where the data alone cannot decide, such as how an immature **Underwriting year** will develop.

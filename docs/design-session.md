@@ -43,8 +43,8 @@ The demo shows actuarial leaders, and hands-on actuaries following along, how to
   - Q28: three ADRs (DuckDB, hidden ground truth, Streamlit), to be written once the summary is confirmed.
 - **Round 8 (ticket breakdown):**
   - The Legacy dashboard uses the standard development factors from the start. Chapter 5 adds the actuary's review and the hurricane loading.
-  - No case reserves: a claim is paid in full when reported, so Paid equals reported. Per Underwriting year, Ultimate = Paid + IBNR (the user's portfolio-level "incurred").
-  - Actual for A/E is Ultimate. "Incurred" is avoided as a term because actuaries read it as including case reserves.
+  - Claims have no development: a claim is paid in full when reported, so case reserves are always zero. The only reserves are IBNR. The full standard vocabulary is kept: Incurred = Paid + Case reserve (= Paid in this demo), and Ultimate = Incurred + IBNR. This keeps the demo focused on a small set of metrics.
+  - Actual for A/E is Ultimate.
   - Ticket 12 (Held-out set) is written by the user (`ready-for-human`).
 - **Deferred to build time:** Q15 (which precomputed tables to keep, to be revisited while building).
 

@@ -41,6 +41,11 @@ The demo shows actuarial leaders, and hands-on actuaries following along, how to
   - Q26: Ch5's expert judgment is a Gulf Coast hurricane in mid-September 2026, mostly unreported at valuation.
   - Q27: Ch7's ripple effect is a coding agent refitting the pricing GLM with a destination factor.
   - Q28: three ADRs (DuckDB, hidden ground truth, Streamlit), to be written once the summary is confirmed.
+- **Round 8 (ticket breakdown):**
+  - The Legacy dashboard uses the standard development factors from the start. Chapter 5 adds the actuary's review and the hurricane loading.
+  - No case reserves: a claim is paid in full when reported, so Paid equals reported. Per Underwriting year, Ultimate = Paid + IBNR (the user's portfolio-level "incurred").
+  - Actual for A/E is Ultimate. "Incurred" is avoided as a term because actuaries read it as including case reserves.
+  - Ticket 12 (Held-out set) is written by the user (`ready-for-human`).
 - **Deferred to build time:** Q15 (which precomputed tables to keep, to be revisited while building).
 
 ## Open (to resume)

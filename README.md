@@ -9,6 +9,7 @@ Install [uv](https://docs.astral.sh/uv/), then from the repo root:
 ```sh
 uv run demo reset       # build the local DuckDB warehouse from the seed
 uv run demo dashboard   # open the Legacy dashboard
+uv run demo chat        # open the Analytics agent (needs ANTHROPIC_API_KEY in the environment)
 uv run pytest           # run the tests (no API key needed)
 ```
 

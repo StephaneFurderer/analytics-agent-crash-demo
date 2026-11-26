@@ -6,6 +6,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from compass import metrics, warehouse
+from compass.generator import pricing
 
 APP = str(resources.files("compass.dashboard").joinpath("app.py"))
 
@@ -27,6 +28,28 @@ def test_portfolio_tab_shows_metric_layer_numbers(app, full_con):
 
     assert shown["Bookings"] == f"{expected.booking_count:,.0f}"
     assert shown["Policies"] == f"{expected.policy_count:,.0f}"
+
+
+def test_pricing_tab_renders_without_exceptions(app):
+    assert not app.exception
+    assert "Pricing" in [tab.label for tab in app.tabs]
+
+
+def test_pricing_tab_shows_the_generators_coefficients_exactly(app):
+    shown = [frame.value for frame in app.dataframe if "Coefficient" in frame.value.columns]
+    tables = [dict(zip(frame.Term, frame.Coefficient)) for frame in shown]
+
+    assert dict(pricing.PRICING_GLM_2025.frequency) in tables
+    assert dict(pricing.PRICING_GLM_2025.severity) in tables
+
+
+def test_pricing_tab_shows_expected_values_by_segment(app, full_con):
+    expected = metrics.query(full_con, ["expected_claim_count"], by=["segment"])
+    shown = [frame.value for frame in app.dataframe if "Expected claims" in frame.value.columns]
+
+    assert len(shown) == 1
+    assert list(shown[0].Segment) == list(expected.segment)
+    assert list(shown[0]["Expected claims"]) == [f"{v:,.0f}" for v in expected.expected_claim_count]
 
 
 def test_there_is_no_geographic_ae_view(app):

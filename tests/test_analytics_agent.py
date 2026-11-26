@@ -62,6 +62,9 @@ def test_the_project_config_loads_with_a_key_from_the_environment():
     assert provider.provider == "anthropic"
     assert provider.api_key == DUMMY_KEY
     assert [m.id for m in provider.models] == ["claude-opus-5-5"]
+    # The benchmark asks each question 3 times, with the agent's model.
+    assert config.test.k == 3
+    assert config.test.models == ["anthropic:claude-opus-5-5"]
 
 
 def test_the_committed_context_is_the_config_alone():

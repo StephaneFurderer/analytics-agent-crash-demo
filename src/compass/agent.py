@@ -17,15 +17,19 @@ PROJECT_DIR = REPO_ROOT / "nao"
 WAREHOUSE = REPO_ROOT / "warehouse" / "compass.duckdb"
 API_KEY_ENV = "ANTHROPIC_API_KEY"
 # nao's PostHog telemetry is on by default; the demo needs no hosted service but Anthropic.
-_NAO_ENV = {"POSTHOG_DISABLED": "true"}
+NAO_ENV = {"POSTHOG_DISABLED": "true"}
 
 
-def nao(*args: str, project: Path = PROJECT_DIR, check: bool = True) -> int:
-    """Run the nao CLI from this environment inside a nao project folder."""
-    executable = Path(sys.executable).with_name("nao")
+def nao(*args: str, project: Path = PROJECT_DIR, check: bool = True, env: dict[str, str] | None = None) -> int:
+    """Run the nao CLI from this environment inside a nao project folder (`env` adds variables)."""
     return subprocess.run(
-        [str(executable), *args], cwd=project, env={**os.environ, **_NAO_ENV}, check=check
+        [str(executable()), *args], cwd=project, env={**os.environ, **NAO_ENV, **(env or {})}, check=check
     ).returncode
+
+
+def executable() -> Path:
+    """The nao CLI installed in this environment."""
+    return Path(sys.executable).with_name("nao")
 
 
 class NotReady(Exception):

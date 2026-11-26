@@ -12,3 +12,5 @@ nao/.meta/
 # nao chat / nao test scratch
 nao/tests/outputs/
 .env
+# Archived benchmark runs and the Accuracy matrix (`demo benchmark`, `demo report`).
+benchmark-results/

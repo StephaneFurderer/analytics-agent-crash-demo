@@ -6,6 +6,7 @@ Commands:
 - `dashboard`: open the Legacy dashboard (Streamlit)
 - `chapter N`: jump to a Chapter's tag and reset the warehouse and Context layer to it
 - `chat`: open the Analytics agent (nao chat; needs ANTHROPIC_API_KEY)
+- `benchmark`: run the Benchmark questions (nao test, 3 runs each; needs ANTHROPIC_API_KEY, costs money)
 - `report`: aggregate the archived benchmark results into the Accuracy matrix and a chart
 """
 
@@ -43,12 +44,28 @@ def main(argv: list[str] | None = None) -> int:
 
     commands.add_parser("chat", help="open the Analytics agent's nao chat (needs ANTHROPIC_API_KEY)")
 
+    bench = commands.add_parser("benchmark", help="run the Benchmark questions with nao test (costs API money)")
+    bench.add_argument("--set", dest="set_name", choices=list(benchmark.SETS), default="working",
+                       help="which questions to run (default: working)")
+    bench.add_argument("--chapter", type=int,
+                       help="the Chapter this run is for (default: the Chapter tag checked out)")
+    bench.add_argument("--project", type=Path, default=agent.PROJECT_DIR, help=argparse.SUPPRESS)
+    bench.add_argument("--results", type=Path, default=benchmark.RESULTS_DIR, help="where runs are archived")
+
     report = commands.add_parser("report", help="turn benchmark results into the Accuracy matrix and a chart")
     report.add_argument("--results", type=Path, default=benchmark.RESULTS_DIR, help="archived benchmark results")
     report.add_argument("--questions", type=Path, default=benchmark.QUESTIONS_DIR, help="Benchmark questions")
     report.add_argument("--out", type=Path, help="where to write the matrix and chart (default: --results)")
 
     args = parser.parse_args(argv)
+    if args.command == "benchmark":
+        try:
+            archived = benchmark.run(args.set_name, args.chapter, project=args.project, results_dir=args.results)
+        except (agent.NotReady, benchmark.BenchmarkError) as problem:
+            print(problem, file=sys.stderr)
+            return 1
+        print(f"\nRun archived: {archived}\nNext: uv run demo report")
+        return 0
     if args.command == "report":
         try:
             print(benchmark.report(args.results, args.questions, args.out), end="")

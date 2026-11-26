@@ -16,15 +16,25 @@ results back to the questions by name, and counts a question correct only if all
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
+import secrets
+import shutil
+import signal
+import subprocess
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 import yaml
 
-from compass import agent
+from compass import agent, chapters
 
 TIERS = {"lookup": "Lookup", "definition": "Definition", "judgment": "Judgment"}
 SETS = {"working": "Working set", "heldout": "Held-out set"}
@@ -67,6 +77,120 @@ def questions(tests_dir: Path = QUESTIONS_DIR) -> dict[str, Question]:
             raise BenchmarkError(f"{path}: the name {name!r} is already used by {found[name].path}")
         found[name] = Question(name, tier, set_name, data["prompt"], data.get("sql"), path)
     return found
+
+
+# The benchmark's own chat server, on other ports than `demo chat` (5005/8005) so an open chat keeps running.
+SERVER_PORT = 5105
+FASTAPI_PORT = 8105
+SERVER_START_SECONDS = 180
+
+
+def current_chapter(repo: Path = agent.REPO_ROOT) -> int:
+    """The Chapter a run belongs to: the one whose tag is checked out (after `demo chapter N`)."""
+    found = chapters.at_head(repo)
+    if len(found) == 1:
+        return found[0]
+    where = f"on the tags of Chapters {found}" if found else "not on a Chapter tag"
+    raise BenchmarkError(f"The checked-out commit is {where}. Say which Chapter this run is for: --chapter N.")
+
+
+def run(set_name: str = "working", chapter: int | None = None, *, project: Path = agent.PROJECT_DIR,
+        results_dir: Path = RESULTS_DIR) -> Path:
+    """Run one set's Benchmark questions with `nao test -k 3`; return the archived results file.
+
+    Starts a private `nao chat` server, signs up a throwaway local user on it, runs nao test against
+    it, stops it, and copies nao's results file to `<results_dir>/ch<N>/<set>/`. Costs API money.
+    """
+    chapter = current_chapter() if chapter is None else chapter
+    if not os.environ.get(agent.API_KEY_ENV):
+        raise agent.NotReady(f"Set {agent.API_KEY_ENV} to your Anthropic API key; the benchmark calls the API.")
+    asked = [q for q in questions(project / "tests").values() if q.set == set_name]
+    if not asked:
+        raise BenchmarkError(f"No {SETS[set_name]} questions in {project / 'tests' / set_name}.")
+    warehouse = agent.warehouse_path(project)
+    if not warehouse.exists():
+        raise agent.NotReady(f"No warehouse at {warehouse}. Run `uv run demo reset` first.")
+
+    agent.sync(project)
+    outputs = project / "tests" / "outputs"
+    before = set(outputs.glob("results_*.json"))
+    print(f"Benchmark: Chapter {chapter}, {SETS[set_name]}, {len(asked)} questions x {RUNS} runs.", flush=True)
+    with _chat_server(project, outputs / "chat-server.log") as url:
+        email, password = _local_user(url)
+        # nao test exits 1 when any run fails; that's a result, not an error.
+        agent.nao("test", "-k", str(RUNS), "-s", set_name, project=project, check=False,
+                  env={"BACKEND_URL": url, "NAO_USERNAME": email, "NAO_PASSWORD": password})
+    new = sorted(set(outputs.glob("results_*.json")) - before)
+    if not new:
+        raise BenchmarkError(f"nao test wrote no results file in {outputs}; see its output above.")
+    archived = results_dir / f"ch{chapter}" / set_name / new[-1].name
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(new[-1], archived)
+    return archived
+
+
+@contextlib.contextmanager
+def _chat_server(project: Path, log_path: Path) -> Iterator[str]:
+    """A `nao chat` server for the project, stopped on exit. Yields its URL."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    url = f"http://localhost:{SERVER_PORT}"
+    env = {**os.environ, **agent.NAO_ENV,
+           "BROWSER": "true",            # `nao chat` opens a browser; `true` is a no-op command
+           "ENABLE_USER_SIGNUP": "true"}  # lets each run sign up its own local user (see _local_user)
+    with log_path.open("w") as log:
+        server = subprocess.Popen(
+            [str(agent.executable()), "chat", "--port", str(SERVER_PORT), "--fastapi-port", str(FASTAPI_PORT)],
+            cwd=project, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+        )
+        try:
+            _wait_until_up(url, server, log_path)
+            yield url
+        finally:
+            _stop(server)
+
+
+def _wait_until_up(url: str, server: subprocess.Popen, log_path: Path) -> None:
+    deadline = time.monotonic() + SERVER_START_SECONDS
+    while time.monotonic() < deadline:
+        if server.poll() is not None:
+            raise BenchmarkError(f"nao chat stopped while starting; see {log_path}.")
+        try:
+            urllib.request.urlopen(url, timeout=2)
+            return
+        except urllib.error.HTTPError:
+            return  # it answers
+        except (urllib.error.URLError, OSError):
+            time.sleep(1)
+    raise BenchmarkError(f"nao chat didn't answer on {url} within {SERVER_START_SECONDS} s; see {log_path}.")
+
+
+def _stop(server: subprocess.Popen) -> None:
+    # Ctrl-C to the whole process group: nao chat, its chat server and its FastAPI sidecar.
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(server.pid, signal.SIGINT)
+    try:
+        server.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(server.pid, signal.SIGKILL)
+        server.wait()
+
+
+def _local_user(url: str) -> tuple[str, str]:
+    """Sign up a throwaway user on the local server; nao test logs in with it."""
+    email = f"benchmark-{secrets.token_hex(4)}@compass.local"
+    password = secrets.token_urlsafe(24)
+    request = urllib.request.Request(
+        f"{url}/api/auth/sign-up/email",
+        data=json.dumps({"email": email, "password": password, "name": "Benchmark"}).encode(),
+        headers={"Content-Type": "application/json", "Origin": url},
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(request, timeout=30)
+    except urllib.error.HTTPError as error:
+        raise BenchmarkError(f"Couldn't sign up a local user on {url}: {error.code} {error.read()[:300]!r}")
+    return email, password
 
 
 def _chapter_number(folder: Path) -> int | None:

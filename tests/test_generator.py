@@ -5,11 +5,10 @@ These tests may read the generator's configuration, as ADR 0002 allows.
 
 from datetime import date
 
-import pandas as pd
 import pytest
 
 from compass import metrics, warehouse
-from compass.generator import VALUATION_DATE, generate_book, pricing
+from compass.generator import UNDERWRITING_YEARS, VALUATION_DATE, generate_book, pricing
 
 
 def test_reset_creates_the_warehouse_from_scratch(full_warehouse):
@@ -181,22 +180,14 @@ def test_2025_ae_is_about_1_across_segments(full_con):
 
 @pytest.fixture(scope="module")
 def late_claims():
-    """Per Underwriting year, the claims that occurred by the Valuation date but were reported after it.
+    """Per Underwriting year, the ordinary claims that occurred by the Valuation date but were reported after it.
 
-    Regenerated with every claim reported (a far later Valuation date), from the same random streams.
+    From the same seeded book fully developed (every claim reported); the hurricane is left out, since the
+    standard factors are not meant to see it.
     """
-    from compass.generator import STREAM_CLAIMS, UNDERWRITING_YEARS, generate_claims, rng_for
-    from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
-
-    seed = warehouse.DEFAULT_SEED
-    book = generate_book(seed)
-    late = {}
-    for year in UNDERWRITING_YEARS:
-        every = generate_claims(rng_for(seed, year, STREAM_CLAIMS), year, book["bookings"], book["policies"],
-                                book["destinations"], TRUE_MODEL[year], CLAIM_PROCESS, date(2030, 12, 31))
-        every = every[every.policy_id.str.startswith(f"B{year}")]
-        late[year] = every[(every.loss_date <= VALUATION_DATE) & (every.report_date > VALUATION_DATE)]
-    return late
+    every = generate_book(warehouse.DEFAULT_SEED, reported_by=None, claims=("ordinary",))["claims"]
+    late = every[(every.loss_date <= VALUATION_DATE) & (every.report_date > VALUATION_DATE)]
+    return {year: late[late.claim_id.str.startswith(f"C{year}-")] for year in UNDERWRITING_YEARS}
 
 
 def _ibnr(con, year):
@@ -250,19 +241,8 @@ def test_2025_ae_is_about_1_by_destination_region(full_con):
 
 @pytest.fixture(scope="module")
 def hurricane_claims():
-    """Every claim of the September 2026 Gulf Coast hurricane, reported or not, regenerated from its stream."""
-    from compass.generator import STREAM_HURRICANE, UNDERWRITING_YEARS, rng_for
-    from compass.generator.hurricane import generate_hurricane_claims
-    from compass.generator.truth import HURRICANE
-
-    seed = warehouse.DEFAULT_SEED
-    book = generate_book(seed)
-    frames = []
-    for year in UNDERWRITING_YEARS:
-        frames.append(generate_hurricane_claims(rng_for(seed, year, STREAM_HURRICANE), year, book["bookings"],
-                                                book["policies"], book["destinations"], HURRICANE,
-                                                date(2030, 12, 31)))
-    return pd.concat(frames, ignore_index=True)
+    """Every claim of the September 2026 Gulf Coast hurricane, reported or not: the seeded book fully developed."""
+    return generate_book(warehouse.DEFAULT_SEED, reported_by=None, claims=("hurricane",))["claims"]
 
 
 def test_the_gulf_coast_hurricane_claims_are_largely_unreported_at_the_valuation_date(full_con, hurricane_claims):

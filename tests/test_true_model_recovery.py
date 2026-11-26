@@ -4,9 +4,8 @@ Refit the frequency (Poisson) and severity (Gamma) GLMs, log link, on a fully de
 that they recover the true coefficients, the 2026 destination Drift included, and find nothing else: terms the
 true model doesn't have (an Underwriting-year level, region effects on 2025 or on severity) come back at zero.
 
-Fully developed = the seeded book's Bookings and Policies, with every claim of the true model's claim stream
-(`STREAM_CLAIMS`) regenerated with a Valuation date far in the future, so none is still unreported. The September
-2026 hurricane (its own stream) is a catastrophe event outside the GLMs and is left out. As ADR 0002 allows, this
+Fully developed = the seeded book with every ordinary claim reported (`generate_book(..., reported_by=None)`), so
+none is still unreported. The September 2026 hurricane is a catastrophe event outside the GLMs and is left out. As ADR 0002 allows, this
 test reads the true model (`truth.TRUE_MODEL`); nothing it builds goes into the warehouse.
 
 Tolerance: each refit coefficient must be within 4 standard errors of its true value, the standard errors coming
@@ -18,19 +17,14 @@ separately: observed total / the true model's expected total must be within 4 SE
 Severity is capped at the trip cost in the generator (about 1.6% of claims), a small bias the 4 SE allow.
 """
 
-from datetime import date
-
 import numpy as np
 import pandas as pd
 import pytest
 
 from compass import warehouse
-from compass.generator import STREAM_BOOKINGS, STREAM_CLAIMS, UNDERWRITING_YEARS, VALUATION_DATE, rng_for
-from compass.generator.book import destinations_frame, generate_year
-from compass.generator.claims import generate_claims
+from compass.generator import generate_book
 from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
 
-FULLY_DEVELOPED = date(2035, 12, 31)
 TOLERANCE_SE = 4.0
 DRIFT_YEAR = 2026
 REGIONS = ("caribbean", "gulf_coast")  # reference: us_atlantic
@@ -38,20 +32,12 @@ REGIONS = ("caribbean", "gulf_coast")  # reference: us_atlantic
 
 @pytest.fixture(scope="module")
 def developed_book():
-    """(policies with rating features, every claim) for each Underwriting year, from the seeded streams."""
-    seed = warehouse.DEFAULT_SEED
-    destinations = destinations_frame()
-    policies, claims = [], []
-    for year in UNDERWRITING_YEARS:
-        purchased_until = min(date(year, 12, 31), VALUATION_DATE)
-        b, p = generate_year(rng_for(seed, year, STREAM_BOOKINGS), year, purchased_until, destinations)
-        c = generate_claims(rng_for(seed, year, STREAM_CLAIMS), year, b, p, destinations, TRUE_MODEL[year],
-                            CLAIM_PROCESS, FULLY_DEVELOPED)
-        p = (p.merge(b, on="booking_id").merge(destinations[["destination_id", "region"]], on="destination_id"))
-        p["underwriting_year"] = year
-        policies.append(p)
-        claims.append(c)
-    return pd.concat(policies, ignore_index=True), pd.concat(claims, ignore_index=True)
+    """(policies with rating features, every ordinary claim) of the seeded book, fully developed."""
+    book = generate_book(warehouse.DEFAULT_SEED, reported_by=None, claims=("ordinary",))
+    policies = (book["policies"].merge(book["bookings"], on="booking_id")
+                .merge(book["destinations"][["destination_id", "region"]], on="destination_id"))
+    policies["underwriting_year"] = policies.booking_id.str[1:5].astype(int)
+    return policies, book["claims"]
 
 
 def _rating_terms(frame: pd.DataFrame, terms) -> pd.DataFrame:

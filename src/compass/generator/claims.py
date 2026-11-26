@@ -6,7 +6,8 @@ claim is post-departure (delay, interruption) with the model's
 Gamma around the model's severity mean for that claim type, capped at the trip
 cost. Pre-departure claims occur between purchase and departure; post-departure
 claims occur within the trip. Each claim is reported after a reporting lag, and
-is paid in full when reported. Only claims reported by the Valuation date are kept.
+is paid in full when reported. Only claims reported by `reported_by` (the Valuation date) are kept;
+`None` keeps every claim.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from compass.generator.truth import ClaimProcess
 
 def generate_claims(rng: np.random.Generator, year: int, bookings: pd.DataFrame, policies: pd.DataFrame,
                     destinations: pd.DataFrame, model: GLM, process: ClaimProcess,
-                    valuation_date: date) -> pd.DataFrame:
+                    reported_by: date | None) -> pd.DataFrame:
     p = (policies.merge(bookings, on="booking_id", how="left")
          .merge(destinations[["destination_id", "region"]], on="destination_id", how="left"))
     purchase = pd.to_datetime(p.purchase_date).to_numpy().astype("datetime64[D]")
@@ -62,7 +63,8 @@ def generate_claims(rng: np.random.Generator, year: int, bookings: pd.DataFrame,
         "paid_amount": amount,
         "case_reserve": 0.0,
     })
-    claims = claims[claims.report_date <= np.datetime64(valuation_date)]
+    if reported_by is not None:
+        claims = claims[claims.report_date <= np.datetime64(reported_by)]
     return number_claims(claims, year)
 
 

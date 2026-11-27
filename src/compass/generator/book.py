@@ -9,7 +9,7 @@ import pandas as pd
 
 from compass.generator import portfolio as pf
 from compass.generator.destinations import DESTINATIONS
-from compass.generator.pricing import PRICING_GLM_2025, pure_premium
+from compass.generator.pricing import PRICING_GLM_2025, post_departure_share, pure_premium
 
 # Departures are drawn over this many months from 1 January of the Underwriting
 # year; a trip belongs to the year only if it was purchased in it.
@@ -115,6 +115,8 @@ def _policies(rng, bookings: pd.DataFrame, destinations: pd.DataFrame) -> pd.Dat
     peak = np.isin(month, pf.PEAK_MONTHS)
     advance = (departure - pd.to_datetime(bookings.purchase_date)).dt.days.to_numpy()
     n = len(bookings)
+    trip_share = post_departure_share(*(pd.to_datetime(bookings[c]).to_numpy().astype("datetime64[D]")
+                                        for c in ("purchase_date", "departure_date", "return_date")))
 
     hotel_rate = dest.hotel_rate.to_numpy() * (1 + pf.HOTEL_PEAK_UPLIFT * peak) * rng.uniform(*pf.HOTEL_RATE_NOISE, n)
     hotel_cost = np.round(np.round(hotel_rate, 2) * bookings.num_nights.to_numpy(), 2)
@@ -141,6 +143,7 @@ def _policies(rng, bookings: pd.DataFrame, destinations: pd.DataFrame) -> pd.Dat
             "_segment": b.segment.to_numpy(),
             "_state": b.state_of_residence.to_numpy(),
             "_month": month[covered],
+            "_post_share": trip_share[covered],
             "_region": dest.region.to_numpy()[covered],
         }))
     policies = pd.concat(frames).sort_values("_order").reset_index(drop=True)
@@ -149,7 +152,7 @@ def _policies(rng, bookings: pd.DataFrame, destinations: pd.DataFrame) -> pd.Dat
         "age": policies._age.to_numpy(), "trip_cost": policies.trip_cost.to_numpy(),
         "product": policies["product"].to_numpy(), "segment": policies._segment.to_numpy(),
         "state_of_residence": policies._state.to_numpy(), "departure_month": policies._month.to_numpy(),
-        "region": policies._region.to_numpy(),
+        "region": policies._region.to_numpy(), "post_departure_share": policies._post_share.to_numpy(),
     }
     pure = np.round(pure_premium(PRICING_GLM_2025, features), 2)
     policies["pure_premium"] = pure

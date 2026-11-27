@@ -17,32 +17,24 @@ only, never the level of claims, so the 2026 Drift and the hurricane do not ente
 from __future__ import annotations
 
 import sys
-from datetime import date
 
 import numpy as np
 import pandas as pd
 
-from compass.generator import STREAM_BOOKINGS, STREAM_CLAIMS, rng_for
-from compass.generator.book import destinations_frame, generate_year
-from compass.generator.claims import generate_claims
-from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
+from compass.generator import CALIBRATION_SEEDS, generate_book
 
-SEEDS = range(1000, 1010)  # not the demo's seed: the factors are a selection, not a fit to the book
 YEAR = 2025
 MATURITIES = range(-6, 25)
 TAIL_TOLERANCE = 0.0005  # factors this close to 1 are selected as 1 (fully developed)
 
 
-def simulated_claims(seeds=SEEDS) -> pd.DataFrame:
-    """Every claim of 2025-style books (nothing cut off at a Valuation date), with departure dates."""
-    destinations = destinations_frame()
+def simulated_claims(seeds=CALIBRATION_SEEDS) -> pd.DataFrame:
+    """Every ordinary claim of the books' Underwriting year 2025 (fully developed), with departure dates."""
     frames = []
     for seed in seeds:
-        bookings, policies = generate_year(rng_for(seed, YEAR, STREAM_BOOKINGS), YEAR, date(YEAR, 12, 31),
-                                           destinations)
-        claims = generate_claims(rng_for(seed, YEAR, STREAM_CLAIMS), YEAR, bookings, policies, destinations,
-                                 TRUE_MODEL[YEAR], CLAIM_PROCESS, date(2100, 1, 1))
-        departures = policies.merge(bookings, on="booking_id")[["policy_id", "departure_date"]]
+        book = generate_book(seed, reported_by=None, claims=("ordinary",))
+        claims = book["claims"][book["claims"].claim_id.str.startswith(f"C{YEAR}-")]
+        departures = book["policies"].merge(book["bookings"], on="booking_id")[["policy_id", "departure_date"]]
         frames.append(claims.merge(departures, on="policy_id"))
     return pd.concat(frames, ignore_index=True)
 

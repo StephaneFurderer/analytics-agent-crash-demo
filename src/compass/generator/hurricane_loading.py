@@ -8,64 +8,52 @@ estimate was made, standing in for the actuary's catastrophe estimate.
 
 Method: simulate books under several seeds (not the demo's) with every event claim eventually
 reported. The loading is what the event adds on top of the chain-ladder Ultimate: all its claims,
-minus the event claims already reported by the Valuation date developed with the standard factors.
-It is spread over the Policies at risk in the region on the event date (purchase <= date <= return):
-per Policy for counts, per unit of trip cost for amounts.
+minus the Metric layer's Ultimate on a warehouse holding only the event claims reported by the
+Valuation date (so they are developed exactly as the Metric layer develops them). It is spread over
+the Metric layer's Exposure in the region on the event date: per Policy for counts, per unit of
+trip cost for amounts.
 """
 
 from __future__ import annotations
 
 import sys
-from datetime import date
+import tempfile
+from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
-from compass import metrics
-from compass.generator import STREAM_BOOKINGS, STREAM_HURRICANE, UNDERWRITING_YEARS, VALUATION_DATE, rng_for
-from compass.generator.book import destinations_frame, generate_year
-from compass.generator.hurricane import generate_hurricane_claims
+from compass import metrics, warehouse
+from compass.generator import CALIBRATION_SEEDS, VALUATION_DATE, generate_book
 from compass.generator.truth import HURRICANE
 
-SEEDS = range(1000, 1010)
-EVENT = "September 2026 Gulf Coast hurricane"
+EVENT_NAME = "September 2026 Gulf Coast hurricane"
 
 
-def _factor(maturity: np.ndarray, factors: pd.DataFrame, column: str) -> np.ndarray:
-    """The standard factor for each maturity: the row with the largest maturity at or below it, else the first."""
-    m = factors.maturity_months.to_numpy()
-    idx = np.clip(np.searchsorted(m, maturity, side="right") - 1, 0, len(m) - 1)
-    return factors[column].to_numpy()[idx]
-
-
-def calibrate(seeds=SEEDS) -> dict:
-    destinations = destinations_frame()
-    factors = metrics.standard_development_factors().sort_values("maturity_months")
-    landfall = pd.Timestamp(HURRICANE.landfall)
-    valuation_month = pd.Timestamp(VALUATION_DATE).to_period("M")
+def calibrate(seeds=CALIBRATION_SEEDS) -> dict:
+    """The loading's row: what the event adds on top of the Metric layer's chain-ladder Ultimate, per unit at risk."""
     claims_needed = amount_needed = policies_at_risk = trip_cost_at_risk = 0.0
-    for seed in seeds:
-        for year in UNDERWRITING_YEARS:
-            purchased_until = min(date(year, 12, 31), VALUATION_DATE)
-            b, p = generate_year(rng_for(seed, year, STREAM_BOOKINGS), year, purchased_until, destinations)
-            every = generate_hurricane_claims(rng_for(seed, year, STREAM_HURRICANE), year, b, p, destinations,
-                                              HURRICANE, date(2100, 1, 1))
-            pb = p.merge(b, on="booking_id").merge(destinations[["destination_id", "region"]], on="destination_id")
-            at_risk = ((pb.region == HURRICANE.region) & (pd.to_datetime(pb.purchase_date) <= landfall)
-                       & (landfall <= pd.to_datetime(pb.return_date)))
-            policies_at_risk += at_risk.sum()
-            trip_cost_at_risk += pb.trip_cost[at_risk].sum()
-
-            reported = every[pd.to_datetime(every.report_date) <= pd.Timestamp(VALUATION_DATE)]
-            departure = pd.to_datetime(reported.merge(pb[["policy_id", "departure_date"]], on="policy_id")
-                                       .departure_date)
-            maturity = np.array([(valuation_month - d.to_period("M")).n for d in departure], dtype=int)
-            claims_needed += len(every) - _factor(maturity, factors, "count_factor").sum()
-            amount_needed += (every.paid_amount.sum()
-                              - (reported.paid_amount.to_numpy() * _factor(maturity, factors, "amount_factor")).sum())
-    return {"event": EVENT, "destination_region": HURRICANE.region, "event_date": HURRICANE.landfall.isoformat(),
-            "count_per_policy": round(claims_needed / policies_at_risk, 4),
-            "amount_per_trip_cost": round(amount_needed / trip_cost_at_risk, 4)}
+    in_region = f"destination_region = '{HURRICANE.region}'"
+    with tempfile.TemporaryDirectory() as tmp:
+        for seed in seeds:
+            # The event's claims alone, every one of them; the warehouse holds those reported by the Valuation date.
+            book = generate_book(seed, reported_by=None, claims=("hurricane",))
+            every = book["claims"]
+            book["claims"] = every[every.report_date <= VALUATION_DATE]
+            path = warehouse.write(Path(tmp) / f"seed{seed}.duckdb", **book)
+            con = metrics.connect(path)
+            try:
+                developed = metrics.query(con, ["ultimate", "ultimate_claim_count"], where=in_region).iloc[0]
+                at_risk = metrics.exposure(con, HURRICANE.landfall, where=in_region).iloc[0]
+            finally:
+                con.close()
+            claims_needed += len(every) - developed.ultimate_claim_count
+            amount_needed += every.paid_amount.sum() - developed.ultimate
+            policies_at_risk += at_risk.policies_at_risk
+            trip_cost_at_risk += at_risk.exposure
+    return {"event": EVENT_NAME, "destination_region": HURRICANE.region,
+            "event_date": HURRICANE.landfall.isoformat(),
+            "count_per_policy": round(float(claims_needed / policies_at_risk), 4),
+            "amount_per_trip_cost": round(float(amount_needed / trip_cost_at_risk), 4)}
 
 
 HEADER = """\

@@ -9,11 +9,11 @@ import pandas as pd
 import pytest
 
 from compass import metrics, warehouse
-from compass.generator import VALUATION_DATE, generate_book, pricing
+from compass.generator import UNDERWRITING_YEARS, VALUATION_DATE, generate_book, pricing
 
 
 def test_reset_creates_the_warehouse_from_scratch(full_warehouse):
-    con = warehouse.connect(full_warehouse)
+    con = metrics.connect(full_warehouse)
     by_year = metrics.query(con, ["booking_count", "policy_count"], by=["underwriting_year"]).set_index(
         "underwriting_year")
     con.close()
@@ -27,7 +27,7 @@ def test_reset_creates_the_warehouse_from_scratch(full_warehouse):
 def test_two_resets_with_the_same_seed_are_identical(full_warehouse, tmp_path):
     again = warehouse.reset(tmp_path / "again.duckdb", seed=warehouse.DEFAULT_SEED)
 
-    first, second = warehouse.connect(full_warehouse), warehouse.connect(again)
+    first, second = metrics.connect(full_warehouse), metrics.connect(again)
     for table, key in [("destinations", "destination_id"), ("bookings", "booking_id"),
                        ("policies", "policy_id"), ("claims", "claim_id")]:
         a = first.sql(f"SELECT * FROM {table} ORDER BY {key}").df()
@@ -40,7 +40,7 @@ def test_two_resets_with_the_same_seed_are_identical(full_warehouse, tmp_path):
 def test_a_different_seed_gives_a_different_book(full_warehouse, tmp_path):
     other = warehouse.reset(tmp_path / "other.duckdb", seed=7)
 
-    a, b = warehouse.connect(full_warehouse), warehouse.connect(other)
+    a, b = metrics.connect(full_warehouse), metrics.connect(other)
     premium_a = metrics.query(a, ["written_pure_premium"]).loc[0, "written_pure_premium"]
     premium_b = metrics.query(b, ["written_pure_premium"]).loc[0, "written_pure_premium"]
     a.close()
@@ -148,18 +148,54 @@ def test_no_claim_is_reported_after_the_valuation_date(full_con):
     assert last_report <= VALUATION_DATE
 
 
-def test_both_claim_types_occur_and_post_departure_severity_is_lower(full_con):
+def test_post_departure_severity_is_lower(full_con):
     # The pricing GLM's post_departure severity coefficient is negative, so post-departure
     # claims are smaller relative to trip cost than cancellations.
     by_type = full_con.sql("""
-        SELECT claim_type, count(*) AS n, avg(paid_amount / trip_cost) AS share_of_trip_cost
+        SELECT claim_type, avg(paid_amount / trip_cost) AS share_of_trip_cost
         FROM metric_claims GROUP BY 1
     """).df().set_index("claim_type")
-    share = pricing.PRICING_GLM_2025.post_departure_share
-    n = by_type.n.sum()
 
-    assert by_type.loc["post_departure", "n"] / n == pytest.approx(share, abs=0.05)
     assert by_type.loc["post_departure", "share_of_trip_cost"] < by_type.loc["pre_departure", "share_of_trip_cost"]
+
+
+@pytest.fixture(scope="module")
+def developed_claims(full_warehouse):
+    """Every ordinary claim of the seeded book (fully developed), with its Policy's Metric-layer shares."""
+    claims = generate_book(warehouse.DEFAULT_SEED, reported_by=None, claims=("ordinary",))["claims"]
+    con = metrics.connect(full_warehouse)
+    try:
+        shares = con.sql(
+            "SELECT policy_id, underwriting_year, earned_share, post_departure_share FROM metric_policies").df()
+    finally:
+        con.close()
+    return claims.merge(shares, on="policy_id", validate="many_to_one")
+
+
+def _within(observed: pd.Series, expected: pd.Series, z: float = 4.0) -> None:
+    """The share of claims `observed` (booleans) matches the mean of their probabilities `expected`, within z SE."""
+    se = (expected * (1 - expected)).sum() ** 0.5 / len(expected)
+    assert abs(observed.mean() - expected.mean()) < z * se, (observed.mean(), expected.mean(), se)
+
+
+def test_claims_occur_as_premium_is_earned_so_occurred_losses_match_earned_premium(developed_claims):
+    # Premium is earned evenly over the cover period (purchase to return), and a claim is as likely on any of
+    # its days: the claims that occurred by the Valuation date are each Policy's earned share of its claims.
+    # This is what keeps an immature year's A/E unbiased (occurrence never lags earning).
+    year = developed_claims[developed_claims.underwriting_year == 2026]
+    occurred = year.loss_date <= VALUATION_DATE
+
+    assert 0.3 < occurred.mean() < 0.9  # 2026 is partly earned
+    _within(occurred, year.earned_share)
+
+
+def test_claims_are_post_departure_in_proportion_to_the_trips_days_in_the_cover_period(developed_claims):
+    # The Pricing basis splits each Policy's claims by its post_departure_share (trip days / cover days),
+    # so Pure premium is the generator's expected loss.
+    post = developed_claims.claim_type == "post_departure"
+
+    assert 0.1 < post.mean() < 0.9  # both claim types occur
+    _within(post, developed_claims.post_departure_share)
 
 
 def test_case_reserves_are_zero_so_incurred_equals_paid(full_con):
@@ -169,34 +205,51 @@ def test_case_reserves_are_zero_so_incurred_equals_paid(full_con):
     assert totals.incurred == pytest.approx(totals.paid)
 
 
+# A/E tolerances are statistical: TOLERANCE_SE standard errors of the A/E itself. Claims are compound Poisson, so the
+# standard error of a cell's Ultimate is about sqrt(sum of its claims' squared developed amounts); over earned Pure
+# premium, that is the A/E's standard error (about 0.03 to 0.06 for a region-year here). 4 SE keeps false failures
+# rare across all the cells checked while a misfit of the Drift's size (+40%) still stands out by 7 SE or more.
+TOLERANCE_SE = 4.0
+
+
+def _ae(con, by, year):
+    """A/E on Ultimate (`ae`) and on Incurred for one Underwriting year by `by`, with A/E's standard error."""
+    frame = metrics.query(con, ["ae", "incurred", "earned_pure_premium"], by=[by],
+                          where=f"underwriting_year = {year}").set_index(by)
+    frame["ae_on_incurred"] = frame.incurred / frame.earned_pure_premium
+    spread = con.sql(f"""
+        SELECT c.{by}, sqrt(sum((c.paid_amount * e.amount_factor) ^ 2)) AS ultimate_se
+        FROM metric_claims c JOIN metric_experience e USING (policy_id)
+        WHERE c.underwriting_year = {year} GROUP BY 1
+    """).df().set_index(by)
+    frame["se"] = spread.ultimate_se / frame.earned_pure_premium
+    return frame
+
+
+def _about_1(frame, column="ae"):
+    off = frame[(frame[column] - 1).abs() >= TOLERANCE_SE * frame.se]
+    assert off.empty, off[[column, "se"]]
+    assert (frame.se < 0.07).all(), frame.se  # small enough for "about 1" to mean something
+
+
 def test_2025_ae_is_about_1_across_segments(full_con):
     # The pricing worked in 2025: on Ultimate, with the standard development factors, A/E is about 1.
-    overall = metrics.query(full_con, ["ae"], where="underwriting_year = 2025").iloc[0]
-    by_segment = metrics.query(full_con, ["ae"], by=["segment"], where="underwriting_year = 2025")
+    by_segment = _ae(full_con, "segment", 2025)
 
-    assert overall.ae == pytest.approx(1.0, abs=0.05)
     assert len(by_segment) == 3
-    assert by_segment.ae.between(0.9, 1.1).all()
+    _about_1(by_segment)
 
 
 @pytest.fixture(scope="module")
 def late_claims():
-    """Per Underwriting year, the claims that occurred by the Valuation date but were reported after it.
+    """Per Underwriting year, the ordinary claims that occurred by the Valuation date but were reported after it.
 
-    Regenerated with every claim reported (a far later Valuation date), from the same random streams.
+    From the same seeded book fully developed (every claim reported); the hurricane is left out, since the
+    standard factors are not meant to see it.
     """
-    from compass.generator import STREAM_CLAIMS, UNDERWRITING_YEARS, generate_claims, rng_for
-    from compass.generator.truth import CLAIM_PROCESS, TRUE_MODEL
-
-    seed = warehouse.DEFAULT_SEED
-    book = generate_book(seed)
-    late = {}
-    for year in UNDERWRITING_YEARS:
-        every = generate_claims(rng_for(seed, year, STREAM_CLAIMS), year, book["bookings"], book["policies"],
-                                book["destinations"], TRUE_MODEL[year], CLAIM_PROCESS, date(2030, 12, 31))
-        every = every[every.policy_id.str.startswith(f"B{year}")]
-        late[year] = every[(every.loss_date <= VALUATION_DATE) & (every.report_date > VALUATION_DATE)]
-    return late
+    every = generate_book(warehouse.DEFAULT_SEED, reported_by=None, claims=("ordinary",))["claims"]
+    late = every[(every.loss_date <= VALUATION_DATE) & (every.report_date > VALUATION_DATE)]
+    return {year: late[late.claim_id.str.startswith(f"C{year}-")] for year in UNDERWRITING_YEARS}
 
 
 def _ibnr(con, year):
@@ -221,48 +274,30 @@ def test_2026_ibnr_matches_the_claims_that_occurred_but_were_not_reported(full_c
     assert ibnr.ibnr == pytest.approx(late.paid_amount.sum(), rel=0.2)
 
 
-def _ae_by_region(con, year):
-    """A/E on Ultimate (the `ae` metric) and on Incurred, by destination region, for one Underwriting year."""
-    frame = metrics.query(con, ["ae", "incurred", "earned_pure_premium"], by=["destination_region"],
-                          where=f"underwriting_year = {year}").set_index("destination_region")
-    frame["ae_on_incurred"] = frame.incurred / frame.earned_pure_premium
-    return frame
-
-
 def test_2026_drift_is_clear_on_ultimate_for_caribbean_and_gulf_coast_and_partly_hidden_on_incurred(full_con):
-    ae = _ae_by_region(full_con, 2026)
+    ae = _ae(full_con, "destination_region", 2026)
 
     for region in ("caribbean", "gulf_coast"):
-        assert ae.loc[region, "ae"] > 1.2, region
+        assert ae.loc[region, "ae"] > 1.2, region  # "inadequate" on the dashboard's bands
+        assert ae.loc[region, "ae"] - 1 > TOLERANCE_SE * ae.loc[region, "se"], region
         assert ae.loc[region, "ae_on_incurred"] < ae.loc[region, "ae"] - 0.1, region
     # The rest of the book is still priced right.
-    assert ae.loc["us_atlantic", "ae"] == pytest.approx(1.0, abs=0.1)
+    _about_1(ae.loc[["us_atlantic"]])
 
 
 def test_2025_ae_is_about_1_by_destination_region(full_con):
     # Before the Drift the pricing worked everywhere, on Ultimate and (2025 being mature) on Incurred.
-    ae = _ae_by_region(full_con, 2025)
+    ae = _ae(full_con, "destination_region", 2025)
 
     assert set(ae.index) == {"us_atlantic", "gulf_coast", "caribbean"}
-    assert ae.ae.between(0.9, 1.1).all()
-    assert ae.ae_on_incurred.between(0.9, 1.1).all()
+    _about_1(ae)
+    _about_1(ae, "ae_on_incurred")
 
 
 @pytest.fixture(scope="module")
 def hurricane_claims():
-    """Every claim of the September 2026 Gulf Coast hurricane, reported or not, regenerated from its stream."""
-    from compass.generator import STREAM_HURRICANE, UNDERWRITING_YEARS, rng_for
-    from compass.generator.hurricane import generate_hurricane_claims
-    from compass.generator.truth import HURRICANE
-
-    seed = warehouse.DEFAULT_SEED
-    book = generate_book(seed)
-    frames = []
-    for year in UNDERWRITING_YEARS:
-        frames.append(generate_hurricane_claims(rng_for(seed, year, STREAM_HURRICANE), year, book["bookings"],
-                                                book["policies"], book["destinations"], HURRICANE,
-                                                date(2030, 12, 31)))
-    return pd.concat(frames, ignore_index=True)
+    """Every claim of the September 2026 Gulf Coast hurricane, reported or not: the seeded book fully developed."""
+    return generate_book(warehouse.DEFAULT_SEED, reported_by=None, claims=("hurricane",))["claims"]
 
 
 def test_the_gulf_coast_hurricane_claims_are_largely_unreported_at_the_valuation_date(full_con, hurricane_claims):

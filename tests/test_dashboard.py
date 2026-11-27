@@ -1,11 +1,13 @@
 """Seam 2: the Legacy dashboard, run with Streamlit's app test harness on a built warehouse."""
 
+import json
 from importlib import resources
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
 from compass import metrics, warehouse
+from compass.dashboard import performance
 from compass.generator import pricing
 
 APP = str(resources.files("compass.dashboard").joinpath("app.py"))
@@ -78,23 +80,40 @@ def test_performance_tab_renders_without_exceptions(app):
     assert [tab.label for tab in app.tabs][-1] == "Performance"
 
 
-def test_performance_tab_shows_ae_and_band_by_segment(app, full_con):
-    expected = metrics.query(full_con, ["ae"], by=["segment"])
-    shown = [frame.value for frame in app.dataframe if "Segment" in frame.value.columns and "A/E" in frame.value]
-
+def _ae_table(app, column):
+    shown = [frame.value for frame in app.dataframe if column in frame.value.columns and "A/E" in frame.value]
     assert len(shown) == 1
-    assert list(shown[0].Segment) == list(expected.segment)
-    assert list(shown[0]["A/E"]) == [f"{v:.3f}" for v in expected.ae]
-    assert list(shown[0]["A/E band"]) == [metrics.ae_band(full_con, v) for v in expected.ae]
+    return shown[0]
 
 
-def test_performance_tab_shows_ae_by_departure_month(app, full_con):
-    expected = metrics.query(full_con, ["ae"], by=["departure_month"])
-    shown = [frame.value for frame in app.dataframe
-             if "Departure month" in frame.value.columns and "A/E" in frame.value]
+def test_performance_tab_shows_ae_and_band_by_segment_for_the_latest_underwriting_year(app, full_con):
+    # One Underwriting year at a time, so 2026's Drift isn't diluted by mature 2025.
+    expected = metrics.query(full_con, ["ae"], by=["segment"], where="underwriting_year = 2026")
+    shown = _ae_table(app, "Segment")
 
-    assert len(shown) == 1
-    assert list(shown[0]["A/E"]) == [f"{v:.3f}" for v in expected.ae]
+    assert app.selectbox(key=performance.YEAR_KEY).value == 2026
+    assert list(shown.Segment) == list(expected.segment)
+    assert list(shown["A/E"]) == [f"{v:.3f}" for v in expected.ae]
+    assert list(shown["A/E band"]) == [metrics.ae_band(full_con, v) for v in expected.ae]
+
+
+def test_performance_tab_shows_ae_by_departure_month_for_the_chosen_underwriting_year(app, full_con):
+    app.selectbox(key=performance.YEAR_KEY).set_value(2025).run()
+    expected = metrics.query(full_con, ["ae"], by=["departure_month"], where="underwriting_year = 2025")
+    shown = _ae_table(app, "Departure month")
+
+    assert list(shown["A/E"]) == [f"{v:.3f}" for v in expected.ae]
+    segments = metrics.query(full_con, ["ae"], by=["segment"], where="underwriting_year = 2025")
+    assert list(_ae_table(app, "Segment")["A/E"]) == [f"{v:.3f}" for v in segments.ae]
+
+
+def test_portfolio_tab_charts_bookings_by_departure_month_per_underwriting_year(app):
+    [heading] = [h.value for h in app.subheader if h.value.startswith("Bookings by departure month")]
+    [chart] = app.get("vega_lite_chart")
+    spec = json.loads(chart.proto.spec)
+
+    assert "underwriting year" in heading.lower()
+    assert "color" in spec["encoding"]  # one series per Underwriting year
 
 
 def test_performance_tab_shows_ultimate_and_ae_tiles(app, full_con):

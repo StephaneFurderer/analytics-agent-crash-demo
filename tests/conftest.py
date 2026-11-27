@@ -2,13 +2,16 @@
 
 - `tiny_book`: a connection to a warehouse built from a tiny hand-built book (Seam 1).
 - `full_warehouse`: the path of a full seeded warehouse, built once per session.
+
+Plus helpers the benchmark report tests share: fixture Benchmark questions and `nao test` results files.
 """
 
+import json
 from datetime import date
 
 import pytest
 
-from compass import warehouse
+from compass import cli, metrics, warehouse
 
 DESTINATIONS = [
     {"destination_id": 1, "city": "Miami Beach", "state_or_country": "FL", "region": "us_atlantic",
@@ -33,11 +36,11 @@ BOOKINGS = [
      "state_of_residence": "CA", "coverage_type": "flight_only",
      "purchase_date": date(2025, 11, 20), "departure_date": date(2026, 1, 5),
      "return_date": date(2026, 1, 12), "num_nights": 7},
-    # Purchased in 2026 and still on risk at the Valuation date (2026-09-30):
-    # 20 of its 40 days from purchase to return have passed, so half is earned.
+    # Purchased in 2026 and still on risk at the Valuation date (2026-09-30): of its 40 days from purchase
+    # to return (both included), 20 have passed by the end of the Valuation date, so half is earned.
     {"booking_id": "B4", "segment": "baseline", "destination_id": 1, "age": 50,
      "state_of_residence": "FL", "coverage_type": "hotel_only",
-     "purchase_date": date(2026, 9, 10), "departure_date": date(2026, 9, 25),
+     "purchase_date": date(2026, 9, 11), "departure_date": date(2026, 9, 25),
      "return_date": date(2026, 10, 20), "num_nights": 25},
 ]
 
@@ -74,7 +77,7 @@ PRICING_COEFFICIENTS = [
         ("frequency", "state_CA", 0.5), ("frequency", "month_1", 0.6),
         ("severity", "intercept", 4.0), ("severity", "age", 0.05), ("severity", "log_trip_cost", 0.3),
         ("severity", "product_flight", -0.2), ("severity", "post_departure", -0.5),
-        ("premium", "post_departure_share", 0.4), ("premium", "expense_load", 1.1),
+        ("premium", "expense_load", 1.1),
     ]
 ]
 
@@ -104,7 +107,7 @@ def full_warehouse(tmp_path_factory):
 
 @pytest.fixture
 def full_con(full_warehouse):
-    con = warehouse.connect(full_warehouse)
+    con = metrics.connect(full_warehouse)
     yield con
     con.close()
 
@@ -113,8 +116,55 @@ def full_con(full_warehouse):
 def tiny_book(tmp_path):
     path = tmp_path / "tiny.duckdb"
     warehouse.write(path, destinations=DESTINATIONS, bookings=BOOKINGS, policies=POLICIES, claims=CLAIMS,
-                    pricing_coefficients=PRICING_COEFFICIENTS, development_factors=DEVELOPMENT_FACTORS,
-                    hurricane_loading=HURRICANE_LOADING)
-    con = warehouse.connect(path)
+                    pricing_coefficients=PRICING_COEFFICIENTS)
+    con = metrics.connect(path, development_factors=DEVELOPMENT_FACTORS, hurricane_loading=HURRICANE_LOADING)
     yield con
     con.close()
+
+
+# Benchmark report helpers (test_benchmark_report.py, test_exploratory.py).
+
+def question(tests_dir, folder, name, tier, set_name):
+    path = tests_dir / folder / f"{name}.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"name: {name}\nprompt: What is {name}?\ntags: [tier:{tier}, set:{set_name}]\n"
+        f"sql: SELECT 1 AS answer\n"
+    )
+
+
+def nao_results(results_dir, chapter, set_name, runs, stamp="20261126_120000"):
+    """A results file shaped like `nao test`'s, archived where `demo benchmark` puts it.
+
+    `runs` maps a question name to the pass/fail of each attempt.
+    """
+    path = results_dir / f"ch{chapter}" / set_name / f"results_{stamp}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    results = [
+        {"name": name, "model": "anthropic:claude-opus-5-5", "passed": passed, "message": "", "tokens": 1000,
+         "cost": 0.05, "duration_ms": 1, "tool_call_count": 1, "error": None, "details": None, "attempt": i}
+        for name, attempts in runs.items()
+        for i, passed in enumerate(attempts, start=1)
+    ]
+    path.write_text(json.dumps({"timestamp": "2026-11-26T12:00:00", "results": results}))
+    return path
+
+
+def matrix_rows(markdown, heading):
+    """The table under `heading` in the report, as {first cell: [other cells]}."""
+    lines = markdown.split(heading, 1)[1].splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("|"))
+    table = []
+    for line in lines[start:]:
+        if not line.startswith("|"):
+            break
+        if not set(line) <= set("|-: "):
+            table.append([cell.strip() for cell in line.strip("|").split("|")])
+    header, *rows = table
+    return header, {row[0]: row[1:] for row in rows}
+
+
+def run_report(tmp_path, tests_dir, results_dir):
+    out = tmp_path / "report"
+    code = cli.main(["report", "--questions", str(tests_dir), "--results", str(results_dir), "--out", str(out)])
+    return code, out

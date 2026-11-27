@@ -2,7 +2,7 @@
 
 A Policy is at risk on a date from its purchase date to its return date, both included. Tiny book:
 B1 (Miami, 10 Jan - 3 Mar 2025, two Policies 9000 + 600), B2-H (Galveston, 1 Jun - 4 Jul 2025, 500),
-B3-F (Nassau, 20 Nov 2025 - 12 Jan 2026, 800), B4-H (Miami, 10 Sep - 20 Oct 2026, 7000).
+B3-F (Nassau, 20 Nov 2025 - 12 Jan 2026, 800), B4-H (Miami, 11 Sep - 20 Oct 2026, 7000).
 """
 
 from datetime import date
@@ -93,9 +93,8 @@ def test_editing_the_hurricane_loading_changes_ultimate_with_loading(tmp_path):
     edited = [{"event": "edited storm", "destination_region": "us_atlantic", "event_date": date(2026, 9, 16),
                "count_per_policy": 0.1, "amount_per_trip_cost": 0.2}]
     built = warehouse.write(tmp_path / "edited.duckdb", destinations=DESTINATIONS, bookings=BOOKINGS,
-                            policies=POLICIES, claims=CLAIMS, pricing_coefficients=PRICING_COEFFICIENTS,
-                            development_factors=DEVELOPMENT_FACTORS, hurricane_loading=edited)
-    con = warehouse.connect(built)
+                            policies=POLICIES, claims=CLAIMS, pricing_coefficients=PRICING_COEFFICIENTS)
+    con = metrics.connect(built, development_factors=DEVELOPMENT_FACTORS, hurricane_loading=edited)
     try:
         result = metrics.query(con, ["ultimate", "ultimate_with_loading", "ultimate_claim_count_with_loading"],
                                by=["underwriting_year"]).set_index("underwriting_year")

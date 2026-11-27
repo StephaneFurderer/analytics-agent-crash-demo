@@ -10,7 +10,7 @@ import pytest
 from compass import benchmark, exploratory
 from compass.cli import main as cli_main
 
-from test_benchmark_report import matrix_rows, nao_results, question, run_report
+from conftest import matrix_rows, nao_results, question, run_report
 
 
 def exploratory_question(tests_dir, name, criteria):

@@ -8,7 +8,6 @@ import re
 import pytest
 
 from compass import agent, benchmark, metrics, warehouse
-from compass.generator import generate_book
 
 ALL_QUESTIONS = benchmark.questions()
 QUESTIONS = {n: q for n, q in ALL_QUESTIONS.items() if q.set in benchmark.ACCURACY_SETS}
@@ -39,14 +38,11 @@ def test_every_trap_is_probed_by_a_working_question():
 
 
 @pytest.fixture(scope="module")
-def no_judgment_con(tmp_path_factory):
+def no_judgment_con(full_warehouse):
     """The seeded book with the Expert judgment taken out: no development (factors 1) and no Hurricane loading."""
     factors = metrics.standard_development_factors().assign(count_factor=1.0, amount_factor=1.0)
     loading = metrics.standard_hurricane_loading().assign(count_per_policy=0.0, amount_per_trip_cost=0.0)
-    path = tmp_path_factory.mktemp("no_judgment") / "compass.duckdb"
-    warehouse.write(path, development_factors=factors, hurricane_loading=loading,
-                    **generate_book(warehouse.DEFAULT_SEED))
-    con = warehouse.connect(path)
+    con = metrics.connect(full_warehouse, development_factors=factors, hurricane_loading=loading)
     yield con
     con.close()
 
@@ -91,7 +87,7 @@ def test_the_reference_sql_answers_from_the_metric_layer(name, full_con):
 def other_seed_con(request, tmp_path_factory):
     """The same book drawn with another seed: what the noise alone could have given instead."""
     path = warehouse.reset(tmp_path_factory.mktemp(f"seed{request.param}") / "compass.duckdb", seed=request.param)
-    con = warehouse.connect(path)
+    con = metrics.connect(path)
     yield con
     con.close()
 

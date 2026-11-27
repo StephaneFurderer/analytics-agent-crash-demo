@@ -8,7 +8,7 @@ def test_demo_reset_builds_a_warehouse_on_a_clean_path(tmp_path, capsys):
 
     assert cli.main(["reset", "--path", str(path), "--seed", "42"]) == 0
 
-    con = warehouse.connect(path)
+    con = metrics.connect(path)
     assert metrics.query(con, ["booking_count"]).loc[0, "booking_count"] > 0
     con.close()
     assert str(path) in capsys.readouterr().out
@@ -20,7 +20,7 @@ def test_demo_setup_builds_the_warehouse_and_flags_a_missing_api_key(tmp_path, c
 
     assert cli.main(["setup", "--path", str(path)]) == 0
 
-    con = warehouse.connect(path)
+    con = metrics.connect(path)
     assert metrics.query(con, ["policy_count"]).loc[0, "policy_count"] > 0
     con.close()
     assert "ANTHROPIC_API_KEY" in capsys.readouterr().out

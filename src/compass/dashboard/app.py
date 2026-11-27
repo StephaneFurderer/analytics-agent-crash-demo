@@ -20,7 +20,7 @@ if not path.exists():
     st.error(f"No warehouse at {path}. Run `uv run demo reset` first.")
     st.stop()
 
-con = warehouse.connect(path)
+con = metrics.connect(path)
 try:
     catalogue = metrics.definitions(con).set_index("metric")
     for tab, (_, render) in zip(st.tabs([name for name, _ in TABS]), TABS):

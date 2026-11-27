@@ -77,9 +77,8 @@ def test_the_warehouse_reads_the_version_controlled_factors_file(full_con):
 def test_editing_the_factors_changes_ibnr(tmp_path):
     edited = [{"maturity_months": 0, "count_factor": 3.0, "amount_factor": 3.0}]
     built = warehouse.write(tmp_path / "edited.duckdb", destinations=DESTINATIONS, bookings=BOOKINGS,
-                            policies=POLICIES, claims=CLAIMS, pricing_coefficients=PRICING_COEFFICIENTS,
-                            development_factors=edited)
-    con = warehouse.connect(built)
+                            policies=POLICIES, claims=CLAIMS, pricing_coefficients=PRICING_COEFFICIENTS)
+    con = metrics.connect(built, development_factors=edited)
     try:
         assert metrics.query(con, ["ibnr"]).loc[0, "ibnr"] == pytest.approx(2 * 4550.0)
     finally:

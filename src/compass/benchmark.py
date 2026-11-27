@@ -9,6 +9,10 @@ A Benchmark question is a YAML file under `nao/tests/<set>/` (`working/` or `hel
     sql: |                                  # reference answer, from the Metric layer
       SELECT count(*) AS policy_count FROM metric_policies WHERE underwriting_year = 2025
 
+The warehouse file nao runs reference SQL on holds the base tables only (the Metric layer is applied per
+connection, `metrics.connect`), so `demo benchmark` first stages the set (`stage`): each question is copied
+under `nao/tests/_run/` with its reference answer computed through the Metric layer, written as literal rows.
+
 `demo benchmark` runs one set with `nao test -k 3` and archives nao's results file under
 `benchmark-results/ch<N>/<set>/`: the folder is what ties a run to its Chapter and set (nao's results
 carry neither, nor the tags). `demo report` reads the latest file of each Chapter and set, joins the
@@ -43,6 +47,8 @@ ACCURACY_SETS = ("working", "heldout")  # objective sets; Exploratory questions 
 RUNS = 3  # each question is asked this many times; correct only if every run is correct
 QUESTIONS_DIR = agent.PROJECT_DIR / "tests"
 RESULTS_DIR = agent.REPO_ROOT / "benchmark-results"
+# Folder under the project's tests/ where `stage` writes the questions nao test runs (gitignored).
+STAGED = "_run"
 
 
 class BenchmarkError(Exception):
@@ -73,7 +79,7 @@ def questions(tests_dir: Path = QUESTIONS_DIR) -> dict[str, Question]:
     found: dict[str, Question] = {}
     for path in sorted([*tests_dir.rglob("*.yml"), *tests_dir.rglob("*.yaml")]):
         relative = path.relative_to(tests_dir)
-        if "outputs" in relative.parts:
+        if "outputs" in relative.parts or relative.parts[0] == STAGED:
             continue
         data = yaml.safe_load(path.read_text())
         name = data.get("name", path.stem)
@@ -117,6 +123,63 @@ def current_chapter(repo: Path = agent.REPO_ROOT) -> int:
     raise BenchmarkError(f"The checked-out commit is {where}. Say which Chapter this run is for: --chapter N.")
 
 
+def stage(set_name: str, project: Path, warehouse_path: Path) -> str:
+    """Stage one set's questions for nao test; return the `nao test -s` selection that runs them.
+
+    Each question is copied to `<project>/tests/_run/<set>/` with its reference SQL replaced by its answer
+    (computed through the Metric layer on `warehouse_path`) as literal rows, so nao can check it on the
+    bare warehouse file. Exploratory questions have no reference SQL and are copied as they are.
+    """
+    from compass import metrics
+
+    staged_dir = project / "tests" / STAGED
+    shutil.rmtree(staged_dir, ignore_errors=True)
+    con = metrics.connect(warehouse_path)
+    try:
+        for question in questions(project / "tests").values():
+            if question.set != set_name:
+                continue
+            data = yaml.safe_load(question.path.read_text())
+            if question.sql:
+                data["sql"] = literal_sql(con.sql(question.sql).df())
+            target = staged_dir / question.path.relative_to(project / "tests")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    finally:
+        con.close()
+    return STAGED
+
+
+def literal_sql(answer: pd.DataFrame) -> str:
+    """A DuckDB query returning exactly `answer`'s rows and column names, from literals only."""
+    columns = ", ".join('"' + str(c).replace('"', '""') + '"' for c in answer.columns)
+    rows = [f"({', '.join(_literal(v) for v in row)})" for row in answer.itertuples(index=False)]
+    if not rows:
+        null_row = "(" + ", ".join("NULL" for _ in answer.columns) + ")"
+        return f"SELECT * FROM (VALUES {null_row}) AS answer({columns}) WHERE false"
+    return f"SELECT * FROM (VALUES {', '.join(rows)}) AS answer({columns})"
+
+
+def _literal(value) -> str:
+    if hasattr(value, "item") and not isinstance(value, pd.Timestamp):
+        value = value.item()  # numpy scalar -> Python
+    if value is None or (isinstance(value, float) and value != value):
+        return "NULL"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return f"{value!r}::DOUBLE"
+    if isinstance(value, pd.Timestamp):
+        if value == value.normalize():
+            return f"DATE '{value.date().isoformat()}'"
+        return f"TIMESTAMP '{value.isoformat(sep=' ')}'"
+    if hasattr(value, "isoformat"):
+        return f"DATE '{value.isoformat()}'"
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def run(set_name: str = "working", chapter: int | None = None, *, project: Path = agent.PROJECT_DIR,
         results_dir: Path = RESULTS_DIR) -> Path:
     """Run one set's Benchmark questions with `nao test -k 3`; return the archived results file.
@@ -135,13 +198,14 @@ def run(set_name: str = "working", chapter: int | None = None, *, project: Path 
         raise agent.NotReady(f"No warehouse at {warehouse}. Run `uv run demo reset` first.")
 
     agent.sync(project)
+    selection = stage(set_name, project, warehouse)
     outputs = project / "tests" / "outputs"
     before = set(outputs.glob("results_*.json"))
     print(f"Benchmark: Chapter {chapter}, {SETS[set_name]}, {len(asked)} questions x {RUNS} runs.", flush=True)
     with _chat_server(project, outputs / "chat-server.log") as url:
         email, password = _local_user(url)
         # nao test exits 1 when any run fails; that's a result, not an error.
-        agent.nao("test", "-k", str(RUNS), "-s", set_name, project=project, check=False,
+        agent.nao("test", "-k", str(RUNS), "-s", selection, project=project, check=False,
                   env={"BACKEND_URL": url, "NAO_USERNAME": email, "NAO_PASSWORD": password})
     new = sorted(set(outputs.glob("results_*.json")) - before)
     if not new:

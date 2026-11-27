@@ -29,8 +29,8 @@ def exposed_policies(policies: pd.DataFrame, bookings: pd.DataFrame, destination
 
 
 def generate_hurricane_claims(rng: np.random.Generator, year: int, bookings: pd.DataFrame, policies: pd.DataFrame,
-                              destinations: pd.DataFrame, event: Hurricane, valuation_date: date) -> pd.DataFrame:
-    """The event's claims on Underwriting year `year`'s Policies that are reported by `valuation_date`.
+                              destinations: pd.DataFrame, event: Hurricane, reported_by: date | None) -> pd.DataFrame:
+    """The event's claims on Underwriting year `year`'s Policies that are reported by `reported_by` (all if None).
 
     Same columns as the claims table, without claim ids: the caller numbers them together with
     the year's ordinary claims.
@@ -56,4 +56,6 @@ def generate_hurricane_claims(rng: np.random.Generator, year: int, bookings: pd.
         "paid_amount": amount,
         "case_reserve": 0.0,
     })
-    return claims[claims.report_date <= valuation_date].reset_index(drop=True)
+    if reported_by is not None:
+        claims = claims[claims.report_date <= reported_by]
+    return claims.reset_index(drop=True)

@@ -3,8 +3,11 @@
 -- count is a DISTINCT count and is correct under any breakdown.
 --
 -- Underwriting year is the year of the purchase date (a definition, not a stored
--- column). Earned premium is earned evenly from purchase to return, prorated at
--- the Valuation date: earned_share is the share of those days that has passed.
+-- column). The cover period runs from purchase to return, both days included.
+-- Earned premium is earned evenly over it, prorated at the Valuation date:
+-- earned_share is the share of its days passed by the end of the Valuation date.
+-- post_departure_share is the share of its days on the trip (departure to return):
+-- the Pricing basis expects that share of the Policy's claims to be post-departure.
 
 CREATE VIEW metric_policies AS
 SELECT
@@ -24,8 +27,10 @@ SELECT
     p.pure_premium,
     p.commercial_premium,
     greatest(0.0, least(1.0,
-        date_diff('day', b.purchase_date, valuation_date())
-        / date_diff('day', b.purchase_date, b.return_date))) AS earned_share
+        (date_diff('day', b.purchase_date, valuation_date()) + 1)
+        / (date_diff('day', b.purchase_date, b.return_date) + 1))) AS earned_share,
+    (date_diff('day', b.departure_date, b.return_date) + 1)
+        / (date_diff('day', b.purchase_date, b.return_date) + 1) AS post_departure_share
 FROM policies p
 JOIN bookings b USING (booking_id)
 JOIN destinations d USING (destination_id);
@@ -40,7 +45,7 @@ INSERT INTO metric_definitions VALUES
     ('written_commercial_premium', 'Written commercial premium', 'metric_policies', 'sum(commercial_premium)', 'currency',
      'Commercial premium written: the price customers pay, summed over Policies.'),
     ('earned_pure_premium', 'Earned pure premium', 'metric_policies', 'sum(pure_premium * earned_share)', 'currency',
-     'Pure premium earned by the Valuation date, earned evenly from purchase date to return date.'),
+     'Pure premium earned by the Valuation date, earned evenly by day from purchase date to return date.'),
     ('earned_commercial_premium', 'Earned commercial premium', 'metric_policies',
      'sum(commercial_premium * earned_share)', 'currency',
-     'Commercial premium earned by the Valuation date, earned evenly from purchase date to return date.');
+     'Commercial premium earned by the Valuation date, earned evenly by day from purchase date to return date.');

@@ -32,6 +32,8 @@ def render(con, catalogue: pd.DataFrame) -> None:
     st.subheader("By product")
     display.table(metrics.query(con, OVERVIEW, by=["product"]), catalogue)
 
-    st.subheader("Bookings by departure month")
-    by_month = metrics.query(con, ["booking_count"], by=["departure_month"])
-    st.bar_chart(by_month.set_index("departure_month")["booking_count"])
+    # One series per Underwriting year: a 2025 and a 2026 purchase departing in the same month are different books.
+    st.subheader("Bookings by departure month and underwriting year")
+    by_month = metrics.query(con, ["booking_count"], by=["departure_month", "underwriting_year"])
+    by_month["underwriting_year"] = by_month.underwriting_year.astype(str)
+    st.bar_chart(by_month, x="departure_month", y="booking_count", color="underwriting_year", stack=False)

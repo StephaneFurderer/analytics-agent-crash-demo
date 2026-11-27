@@ -2,13 +2,16 @@
 
 - `tiny_book`: a connection to a warehouse built from a tiny hand-built book (Seam 1).
 - `full_warehouse`: the path of a full seeded warehouse, built once per session.
+
+Plus helpers the benchmark report tests share: fixture Benchmark questions and `nao test` results files.
 """
 
+import json
 from datetime import date
 
 import pytest
 
-from compass import metrics, warehouse
+from compass import cli, metrics, warehouse
 
 DESTINATIONS = [
     {"destination_id": 1, "city": "Miami Beach", "state_or_country": "FL", "region": "us_atlantic",
@@ -117,3 +120,51 @@ def tiny_book(tmp_path):
     con = metrics.connect(path, development_factors=DEVELOPMENT_FACTORS, hurricane_loading=HURRICANE_LOADING)
     yield con
     con.close()
+
+
+# Benchmark report helpers (test_benchmark_report.py, test_exploratory.py).
+
+def question(tests_dir, folder, name, tier, set_name):
+    path = tests_dir / folder / f"{name}.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"name: {name}\nprompt: What is {name}?\ntags: [tier:{tier}, set:{set_name}]\n"
+        f"sql: SELECT 1 AS answer\n"
+    )
+
+
+def nao_results(results_dir, chapter, set_name, runs, stamp="20261126_120000"):
+    """A results file shaped like `nao test`'s, archived where `demo benchmark` puts it.
+
+    `runs` maps a question name to the pass/fail of each attempt.
+    """
+    path = results_dir / f"ch{chapter}" / set_name / f"results_{stamp}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    results = [
+        {"name": name, "model": "anthropic:claude-opus-5-5", "passed": passed, "message": "", "tokens": 1000,
+         "cost": 0.05, "duration_ms": 1, "tool_call_count": 1, "error": None, "details": None, "attempt": i}
+        for name, attempts in runs.items()
+        for i, passed in enumerate(attempts, start=1)
+    ]
+    path.write_text(json.dumps({"timestamp": "2026-11-26T12:00:00", "results": results}))
+    return path
+
+
+def matrix_rows(markdown, heading):
+    """The table under `heading` in the report, as {first cell: [other cells]}."""
+    lines = markdown.split(heading, 1)[1].splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("|"))
+    table = []
+    for line in lines[start:]:
+        if not line.startswith("|"):
+            break
+        if not set(line) <= set("|-: "):
+            table.append([cell.strip() for cell in line.strip("|").split("|")])
+    header, *rows = table
+    return header, {row[0]: row[1:] for row in rows}
+
+
+def run_report(tmp_path, tests_dir, results_dir):
+    out = tmp_path / "report"
+    code = cli.main(["report", "--questions", str(tests_dir), "--results", str(results_dir), "--out", str(out)])
+    return code, out

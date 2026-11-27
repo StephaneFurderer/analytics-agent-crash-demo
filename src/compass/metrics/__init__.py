@@ -20,6 +20,7 @@ agent by applying it to the file itself after `warehouse.write`:
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from functools import reduce
 from importlib import resources
@@ -105,6 +106,20 @@ def connect(path: str | Path, development_factors: warehouse.Rows | None = None,
 def definitions(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """The metric catalogue, one row per metric."""
     return con.sql("SELECT * FROM metric_definitions ORDER BY metric").df()
+
+
+@dataclass(frozen=True)
+class Definition:
+    """How a metric is presented: its label, unit ('count', 'currency' or 'ratio') and description."""
+    label: str
+    unit: str
+    description: str
+
+
+def definition(catalogue: pd.DataFrame, metric: str) -> Definition:
+    """`metric`'s presentation from a catalogue (`definitions(con)` indexed by metric)."""
+    row = catalogue.loc[metric]
+    return Definition(row["label"], row["unit"], row["description"])
 
 
 def pricing_basis(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:

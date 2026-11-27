@@ -13,3 +13,7 @@ Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 ### Domain docs
 
 Multi-context: `GLOSSARY-MAP.md` links the Demo glossary (`GLOSSARY.md`) and the Travel insurance actuarial business glossary (`docs/business/GLOSSARY.md`); system-wide ADRs live in `docs/adr/`. See `docs/agents/domain.md`.
+
+### Secrets
+
+Get API keys and other secrets with `uv run demo secret check|run`, which reads the shell, then `.env`, then Infisical (`infra`/`prod`). It never prints values. See `docs/agents/secrets.md`.

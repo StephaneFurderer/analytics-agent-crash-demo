@@ -5,9 +5,11 @@ Commands:
 - `reset`: rebuild the warehouse from scratch with the seeded generator
 - `dashboard`: open the Legacy dashboard (Streamlit)
 - `chapter N`: jump to a Chapter's tag and reset the warehouse and Context layer to it
-- `chat`: open the Analytics agent (nao chat; needs ANTHROPIC_API_KEY)
-- `benchmark`: run the Benchmark questions (nao test, 3 runs each; needs ANTHROPIC_API_KEY, costs money)
-- `judge`: score a Chapter's Exploratory questions run against the rubric with Claude (needs ANTHROPIC_API_KEY)
+- `chat`: open the Analytics agent (nao chat; needs an LLM key, see `secret check`)
+- `benchmark`: run the Benchmark questions (nao test, 3 runs each; needs an LLM key, costs money)
+- `judge`: score a Chapter's Exploratory questions run against the rubric with Claude (needs an LLM key)
+- `secret check [NAME...]` / `secret run [--name NAME]... -- CMD`: the agents' secrets tool. Shows which LLM route
+  and which source (shell, .env, Infisical) each secret comes from, or runs CMD with them injected. Never prints values.
 - `report`: aggregate the archived benchmark results into the Accuracy matrix and a chart, plus Exploratory scores
 """
 
@@ -20,7 +22,7 @@ import sys
 from importlib import resources
 from pathlib import Path
 
-from compass import agent, benchmark, chapters, exploratory, warehouse
+from compass import agent, benchmark, chapters, exploratory, keys, warehouse
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -43,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     chapter.add_argument("--repo", type=Path, default=Path.cwd(), help="repo root (default: current directory)")
     chapter.add_argument("--path", type=Path, help="warehouse file (default: <repo>/warehouse/compass.duckdb)")
 
-    commands.add_parser("chat", help="open the Analytics agent's nao chat (needs ANTHROPIC_API_KEY)")
+    commands.add_parser("chat", help="open the Analytics agent's nao chat (needs an LLM key)")
 
     bench = commands.add_parser("benchmark", help="run the Benchmark questions with nao test (costs API money)")
     bench.add_argument("--set", dest="set_name", choices=list(benchmark.SETS), default="working",
@@ -64,7 +66,18 @@ def main(argv: list[str] | None = None) -> int:
     report.add_argument("--questions", type=Path, default=benchmark.QUESTIONS_DIR, help="Benchmark questions")
     report.add_argument("--out", type=Path, help="where to write the matrix and chart (default: --results)")
 
+    secret = commands.add_parser("secret", help="check or inject secrets (shell, .env, Infisical) without printing them")
+    secret_commands = secret.add_subparsers(dest="secret_command", required=True)
+    check = secret_commands.add_parser("check", help="show the LLM route and where each secret comes from")
+    check.add_argument("names", nargs="*", metavar="NAME", help="other secrets to look up")
+    run = secret_commands.add_parser("run", help="run a command with the LLM route (and --name secrets) in its env")
+    run.add_argument("--name", dest="names", action="append", default=[], metavar="NAME",
+                     help="also inject this secret (repeatable)")
+    run.add_argument("cmd", nargs=argparse.REMAINDER, help="-- the command to run")
+
     args = parser.parse_args(argv)
+    if args.command == "secret":
+        return _secret(args)
     if args.command == "benchmark":
         try:
             archived = benchmark.run(args.set_name, args.chapter, project=args.project, results_dir=args.results)
@@ -130,7 +143,42 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
-API_KEY_ENV = "ANTHROPIC_API_KEY"
+def _secret(args: argparse.Namespace) -> int:
+    store = keys.Infisical.from_session()  # once: every lookup reuses the session
+    try:
+        route, no_key = keys.llm_route(infisical=store), ""
+    except keys.NoKey as problem:
+        route, no_key = None, str(problem)
+    found = {name: keys.lookup(name, infisical=store) for name in args.names}
+    if args.secret_command == "check":
+        return _secret_check(store is not None, route, no_key, found)
+    return _secret_run(args.cmd, route, no_key, found)
+
+
+def _secret_check(has_session: bool, route: keys.Route | None, no_key: str,
+                  found: dict[str, keys.Found | None]) -> int:
+    print(f"Infisical: {'session found' if has_session else 'no session (optional: `infisical login`)'}")
+    print(f"LLM: {route.describe()}" if route else f"LLM: none\n{no_key}")
+    for name, secret in found.items():
+        print(f"{name}: {secret.source if secret else 'missing'}")
+    return 0 if route and all(found.values()) else 1
+
+
+def _secret_run(cmd: list[str], route: keys.Route | None, no_key: str,
+                found: dict[str, keys.Found | None]) -> int:
+    cmd = cmd[1:] if cmd[:1] == ["--"] else cmd
+    missing = [name for name, secret in found.items() if secret is None]
+    if not cmd:
+        problem = "Usage: demo secret run [--name NAME]... -- CMD"
+    elif missing:
+        problem = f"Missing secrets: {', '.join(missing)}"
+    elif route is None and not found:
+        problem = no_key
+    else:
+        injected = {name: secret.value for name, secret in found.items() if secret}
+        return subprocess.call(cmd, env={**os.environ, **(route.nao_env() if route else {}), **injected})
+    print(problem, file=sys.stderr)
+    return 1
 
 
 def _setup(path: Path) -> int:
@@ -138,13 +186,10 @@ def _setup(path: Path) -> int:
     print("Dependencies installed by uv.")
     warehouse.reset(path)
     print(f"Warehouse built from seed {warehouse.DEFAULT_SEED}: {path}")
-    if os.environ.get(API_KEY_ENV):
-        print(f"{API_KEY_ENV} is set: the Analytics agent and the benchmark can run.")
-    else:
-        print(
-            f"{API_KEY_ENV} is not set. Chapters 0-1 work without it; the Analytics agent (Chapter 2 on) "
-            f"needs it. See the README."
-        )
+    try:
+        print(f"LLM key found: {keys.llm_route().describe()}. The Analytics agent and the benchmark can run.")
+    except keys.NoKey as problem:
+        print(f"Chapters 0-1 work without an LLM key; the Analytics agent (Chapter 2 on) needs one.\n{problem}")
     return 0
 
 

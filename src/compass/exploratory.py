@@ -13,27 +13,21 @@ Scores are reported in their own section of `demo report`, never in the Accuracy
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections.abc import Callable
 from pathlib import Path
 
-from compass import agent
+from compass import agent, keys
 from compass.benchmark import BenchmarkError, Question
 
-JUDGE_MODEL = "claude-opus-5-5"
 
 Judge = Callable[[str], str]
 """Takes the judge prompt, returns the judge's reply (JSON, see `judge_prompt`)."""
 
 
-def claude_judge(model: str = JUDGE_MODEL) -> Judge:
-    """The real judge: Claude through the Anthropic API. Needs ANTHROPIC_API_KEY; costs money."""
-    if not os.environ.get(agent.API_KEY_ENV):
-        raise agent.NotReady(f"Set {agent.API_KEY_ENV} to your Anthropic API key; the judge calls the API.")
-    import anthropic
-
-    client = anthropic.Anthropic()
+def claude_judge(route: keys.Route) -> Judge:
+    """The real judge: Claude Opus 5.5 on the agent's route (Anthropic or OpenRouter). Costs money."""
+    client, model = route.anthropic_client(), route.model
 
     def judge(prompt: str) -> str:
         message = client.messages.create(model=model, max_tokens=2000,
@@ -89,7 +83,8 @@ def scores_path(results_file: Path) -> Path:
     return results_file.with_name(results_file.name.replace("results_", "scores_", 1))
 
 
-def judge_run(results_file: Path, questions: dict[str, Question], judge: Judge, model: str = JUDGE_MODEL) -> Path:
+def judge_run(results_file: Path, questions: dict[str, Question], judge: Judge,
+              model: str = keys.ANTHROPIC_MODEL) -> Path:
     """Judge every Exploratory answer in a nao results file; save prompts and scores next to it."""
     data = json.loads(results_file.read_text())
     scores = []
@@ -126,8 +121,12 @@ def judge_chapter(chapter: int, results_dir: Path, tests_dir: Path, judge: Judge
     if run is None:
         raise BenchmarkError(f"No Exploratory questions run for Chapter {chapter} in {results_dir}. "
                              f"Run `uv run demo benchmark --set exploratory --chapter {chapter}` first.")
-    judge = judge or claude_judge()
-    return judge_run(run, benchmark.questions(tests_dir), judge)
+    if judge is None:
+        route = agent.llm_route()
+        judge, model = claude_judge(route), f"{route.provider}:{route.model}"
+    else:
+        model = keys.ANTHROPIC_MODEL
+    return judge_run(run, benchmark.questions(tests_dir), judge, model=model)
 
 
 def report_lines(results_dir: Path, tests_dir: Path) -> list[str]:

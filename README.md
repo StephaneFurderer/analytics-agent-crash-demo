@@ -5,7 +5,7 @@ department moving from a **Legacy dashboard** to an **Analytics agent** backed b
 **Chapter** at a time, and measures the agent's **Accuracy** at every step. All names and data are fictional.
 
 Everything runs locally: a DuckDB warehouse rebuilt from a seed, a Streamlit dashboard, and the
-[nao](https://github.com/getnao/nao) agent. The only account you need is an Anthropic API key.
+[nao](https://github.com/getnao/nao) agent. The only account you need is an LLM key: Anthropic or OpenRouter.
 
 ## Setup
 
@@ -19,25 +19,36 @@ Everything runs locally: a DuckDB warehouse rebuilt from a seed, a Streamlit das
    uv run demo setup
    ```
 
-   This installs the dependencies, builds the warehouse at `warehouse/compass.duckdb` and checks your API key.
-3. From Chapter 2 on, the agent needs an Anthropic API key (see below).
+   This installs the dependencies, builds the warehouse at `warehouse/compass.duckdb` and checks your LLM key.
+3. From Chapter 2 on, the agent needs an LLM key (see below).
+4. Work through [Phase one: setup and architecture decisions](docs/phase-one-setup.md) before Chapter 2.
 
 **Platforms.** Setup is tested on macOS (Apple silicon). Windows 10/11 on x86-64 should work the same way: `uv`,
 DuckDB, Streamlit and nao all ship Windows builds, and nothing needs Node or WSL. It has not been tested on
-Windows yet. Run the commands from PowerShell, and set the key with `$env:ANTHROPIC_API_KEY = "sk-ant-..."`.
+Windows yet. Run the commands from PowerShell, and set the key with `$env:ANTHROPIC_API_KEY = "sk-ant-..."` (or a `.env` file).
 Windows on ARM is not supported by nao.
 
-## Anthropic API key
+## LLM key
 
-The Analytics agent and the benchmark call the Anthropic API with your key. Nothing else is hosted.
+The Analytics agent, the benchmark and the judge call Claude Opus 5.5 with your key, through Anthropic or
+OpenRouter; nothing else is hosted (Infisical is optional). Any one of these works; `demo` takes the first it finds:
+
+1. **Your shell**: `export ANTHROPIC_API_KEY=sk-ant-...` or `export OPENROUTER_API_KEY=sk-or-...`
+   (PowerShell: `$env:ANTHROPIC_API_KEY = "sk-ant-..."`).
+2. **A `.env` file** at the repo root, gitignored: copy `.env.example` to `.env` and fill in one key.
+3. **Infisical** (optional): after `infisical login`, `OPENROUTER_API_TOKEN` or `ANTHROPIC_API_TOKEN` from the
+   `infra` project, `prod` environment. Override with `INFISICAL_ENV` or `INFISICAL_PROJECT_ID`.
+
+An Anthropic key goes straight to Anthropic (`claude-opus-5-5`); an OpenRouter key goes through OpenRouter
+(`anthropic/claude-opus-5.5`). Within a source OpenRouter is tried first. There is no automatic fallback: if
+OpenRouter fails, set `COMPASS_LLM_PROVIDER=anthropic` (or `openrouter`) to force a provider.
 
 ```sh
-export ANTHROPIC_API_KEY=sk-ant-...      # macOS / Linux
-$env:ANTHROPIC_API_KEY = "sk-ant-..."    # Windows PowerShell
+uv run demo secret check      # which route and which source; never prints the key
 ```
 
-Create a key at <https://console.anthropic.com/>. Chapters 0 and 1 (warehouse and dashboard) do not need it.
-Never commit it.
+Create a key at <https://console.anthropic.com/> or <https://openrouter.ai/keys>. Chapters 0 and 1 (warehouse and
+dashboard) do not need one. Never commit it.
 
 ## Commands
 
@@ -51,6 +62,8 @@ Never commit it.
 | `uv run demo benchmark` | Run the Benchmark questions (3 runs each) for the current Chapter; `--set heldout`, `--chapter N` | yes, costs money |
 | `uv run demo judge` | Score the current Chapter's Exploratory questions run against its rubric, Claude as judge; `--chapter N` | yes, costs money |
 | `uv run demo report` | Turn benchmark results into the Accuracy matrix and a chart, plus Exploratory scores (`benchmark-results/`) | no |
+| `uv run demo secret check [NAME...]` | Show the LLM route and where each secret comes from (shell, `.env`, Infisical), never the values | no |
+| `uv run demo secret run [--name NAME]... -- CMD` | Run CMD with the LLM route (and named secrets) in its environment, e.g. `-- nao test` | depends on CMD |
 | `uv run pytest` | Run the code tests (no key, no cost) | no |
 
 `reset`, `setup` and `dashboard` accept `--path` (or the `COMPASS_WAREHOUSE` variable) to use another warehouse file.
@@ -169,7 +182,7 @@ uv run demo benchmark --set exploratory   # runs them 3 times with nao test, the
 uv run demo judge                         # (re-)judge the current Chapter's latest Exploratory run
 ```
 
-The judge is Claude (`claude-opus-5-5`, with your API key). Per answer it gets the question, the rubric and the
+The judge is Claude Opus 5.5, on the same route and key as the agent. Per answer it gets the question, the rubric and the
 answer, and says which criteria are met. Its prompts, raw replies and per-criterion verdicts are saved next to the run
 as `benchmark-results/ch<N>/exploratory/scores_<stamp>.json`, for review. `demo report` shows them in a separate
 "Exploratory questions" section (score = share of criteria met, averaged over the runs, plus runs meeting each
@@ -184,7 +197,7 @@ answer is then checked by the model in a short follow-up (it writes the query th
 roughly 30k input and 2k output tokens, plus 78 shorter checks: about 100 full conversations' worth, or **roughly
 US$10 to US$30** at Claude Opus list prices. The Held-out set adds a smaller, separate run. Chat in the web UI costs cents per question. `nao test`
 reports the actual cost of each run in its results, and this section will be updated with measured numbers.
-Set a spending limit in the Anthropic console if you want a hard cap.
+Set a spending limit in the Anthropic or OpenRouter console if you want a hard cap. OpenRouter adds a small fee on top of Anthropic's prices.
 
 ## Where things live
 

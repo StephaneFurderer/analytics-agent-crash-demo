@@ -73,3 +73,9 @@ _Avoid_: Analytics layer, semantic layer, KPI logic
 **Ripple effect**:
 Other agents reusing the **Context layer** beyond chat, for example to build a predictive model or a new application without starting from scratch.
 _Avoid_: Spillover, side benefit
+
+### Running the demo
+
+**LLM route**:
+How the **Analytics agent** and the judge reach Claude. It is either direct to Anthropic or through OpenRouter, and which one depends on the first key found in the shell, then `.env`, then Infisical.
+_Avoid_: Backend, endpoint, LLM config

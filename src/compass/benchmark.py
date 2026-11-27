@@ -39,7 +39,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from compass import agent, chapters
+from compass import agent, chapters, keys
 
 TIERS = {"lookup": "Lookup", "definition": "Definition", "judgment": "Judgment"}
 SETS = {"working": "Working set", "heldout": "Held-out set", "exploratory": "Exploratory questions"}
@@ -188,8 +188,7 @@ def run(set_name: str = "working", chapter: int | None = None, *, project: Path 
     it, stops it, and copies nao's results file to `<results_dir>/ch<N>/<set>/`. Costs API money.
     """
     chapter = current_chapter() if chapter is None else chapter
-    if not os.environ.get(agent.API_KEY_ENV):
-        raise agent.NotReady(f"Set {agent.API_KEY_ENV} to your Anthropic API key; the benchmark calls the API.")
+    route = agent.llm_route()
     asked = [q for q in questions(project / "tests").values() if q.set == set_name]
     if not asked:
         raise BenchmarkError(f"No {SETS[set_name]} questions in {project / 'tests' / set_name}.")
@@ -201,12 +200,13 @@ def run(set_name: str = "working", chapter: int | None = None, *, project: Path 
     selection = stage(set_name, project, warehouse)
     outputs = project / "tests" / "outputs"
     before = set(outputs.glob("results_*.json"))
-    print(f"Benchmark: Chapter {chapter}, {SETS[set_name]}, {len(asked)} questions x {RUNS} runs.", flush=True)
-    with _chat_server(project, outputs / "chat-server.log") as url:
+    print(f"Benchmark: Chapter {chapter}, {SETS[set_name]}, {len(asked)} questions x {RUNS} runs, "
+          f"{route.describe()}.", flush=True)
+    with _chat_server(project, outputs / "chat-server.log", route) as url:
         email, password = _local_user(url)
         # nao test exits 1 when any run fails; that's a result, not an error.
         agent.nao("test", "-k", str(RUNS), "-s", selection, project=project, check=False,
-                  env={"BACKEND_URL": url, "NAO_USERNAME": email, "NAO_PASSWORD": password})
+                  env={**route.nao_env(), "BACKEND_URL": url, "NAO_USERNAME": email, "NAO_PASSWORD": password})
     new = sorted(set(outputs.glob("results_*.json")) - before)
     if not new:
         raise BenchmarkError(f"nao test wrote no results file in {outputs}; see its output above.")
@@ -217,11 +217,11 @@ def run(set_name: str = "working", chapter: int | None = None, *, project: Path 
 
 
 @contextlib.contextmanager
-def _chat_server(project: Path, log_path: Path) -> Iterator[str]:
+def _chat_server(project: Path, log_path: Path, route: keys.Route) -> Iterator[str]:
     """A `nao chat` server for the project, stopped on exit. Yields its URL."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     url = f"http://localhost:{SERVER_PORT}"
-    env = {**os.environ, **agent.NAO_ENV,
+    env = {**os.environ, **agent.NAO_ENV, **route.nao_env(),
            "BROWSER": "true",            # `nao chat` opens a browser; `true` is a no-op command
            "ENABLE_USER_SIGNUP": "true"}  # lets each run sign up its own local user (see _local_user)
     with log_path.open("w") as log:

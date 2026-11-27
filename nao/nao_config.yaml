@@ -5,7 +5,10 @@
 # connection by the dashboard and the benchmark (ADR 0005) until it becomes part
 # of the Context layer in Chapter 6. The metric_* exclude is a second guard.
 #
-# The API key is read from the environment and never written here.
+# The LLM provider, model and key are filled in by `demo` (src/compass/keys.py) from the first key it
+# finds: an Anthropic key goes direct (claude-opus-5-5), an OpenRouter key goes through OpenRouter
+# (anthropic/claude-opus-5.5). The key is never written here. Run nao through `uv run demo chat`,
+# `uv run demo benchmark` or `uv run demo secret run -- nao ...`, which set COMPASS_LLM_*.
 # Do NOT run `nao init` in this folder: it rewrites this file with the key inlined.
 project_name: compass-analytics-agent
 databases:
@@ -16,14 +19,14 @@ databases:
     exclude: ["*.metric_*"]
 llm:
   providers:
-    - provider: anthropic
-      api_key: "{{ env('ANTHROPIC_API_KEY') }}"
+    - provider: "{{ env('COMPASS_LLM_PROVIDER') }}"
+      api_key: "{{ env('COMPASS_LLM_API_KEY') }}"
       models:
-        - id: claude-opus-5-5
+        - id: "{{ env('COMPASS_LLM_MODEL') }}"
           default: true
 # The benchmark (`uv run demo benchmark`): each Benchmark question in tests/ is asked k times;
 # `demo report` counts it correct only if all k runs pass.
 test:
-  models: [anthropic:claude-opus-5-5]
+  models: ["{{ env('COMPASS_LLM_PROVIDER') }}:{{ env('COMPASS_LLM_MODEL') }}"]
   k: 3
   threads: 1

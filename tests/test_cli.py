@@ -32,5 +32,5 @@ def test_demo_setup_confirms_a_present_api_key_without_printing_it(tmp_path, cap
     assert cli.main(["setup", "--path", str(tmp_path / "compass.duckdb")]) == 0
 
     out = capsys.readouterr().out
-    assert "ANTHROPIC_API_KEY is set" in out
+    assert "LLM key found: anthropic (claude-opus-5-5), key from shell" in out
     assert "sk-ant-test" not in out

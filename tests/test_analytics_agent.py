@@ -7,7 +7,7 @@ import subprocess
 import pytest
 from nao_core.config import NaoConfig
 
-from compass import agent, cli, warehouse
+from compass import agent, cli, keys, warehouse
 
 from conftest import BOOKINGS, DESTINATIONS, POLICIES
 
@@ -52,19 +52,23 @@ def test_sync_writes_only_table_metadata_for_the_raw_schema(tmp_path):
 DUMMY_KEY = "sk-ant-dummy-for-tests"
 
 
-def test_the_project_config_loads_with_a_key_from_the_environment():
-    config = NaoConfig.load(agent.PROJECT_DIR, extra_env={"ANTHROPIC_API_KEY": DUMMY_KEY}, process_env=False)
+@pytest.mark.parametrize("route", [
+    keys.Route("anthropic", "claude-opus-5-5", DUMMY_KEY, "shell"),
+    keys.Route("openrouter", "anthropic/claude-opus-5.5", "sk-or-dummy-for-tests", "Infisical"),
+], ids=["anthropic", "openrouter"])
+def test_the_project_config_loads_with_the_route_the_key_opens(route):
+    config = NaoConfig.load(agent.PROJECT_DIR, extra_env=route.nao_env(), process_env=False)
 
     [database] = config.databases
     assert database.type == "duckdb"
     assert (agent.PROJECT_DIR / database.path).resolve() == agent.WAREHOUSE.resolve()
     [provider] = config.llm.providers
-    assert provider.provider == "anthropic"
-    assert provider.api_key == DUMMY_KEY
-    assert [m.id for m in provider.models] == ["claude-opus-5-5"]
+    assert provider.provider == route.provider
+    assert provider.api_key == route.api_key
+    assert [m.id for m in provider.models] == [route.model]
     # The benchmark asks each question 3 times, with the agent's model.
     assert config.test.k == 3
-    assert config.test.models == ["anthropic:claude-opus-5-5"]
+    assert config.test.models == [f"{route.provider}:{route.model}"]
 
 
 def test_the_committed_context_is_the_config_alone():
@@ -78,7 +82,7 @@ def test_no_api_key_is_committed():
     tracked = subprocess.run(
         ["git", "ls-files", "-z"], cwd=agent.REPO_ROOT, capture_output=True, text=True, check=True
     ).stdout.split("\0")
-    key = re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}")
+    key = re.compile(r"sk-(ant|or)-[A-Za-z0-9_-]{20,}")
     offenders = [
         name for name in tracked
         if name and (agent.REPO_ROOT / name).is_file()

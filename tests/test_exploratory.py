@@ -122,9 +122,10 @@ def test_demo_judge_scores_a_chapters_latest_exploratory_run(explored, monkeypat
     tmp_path, tests_dir, results_dir = explored
     exploratory_results(results_dir, 2, {"underperformance": ["old"]}, stamp="20261101_100000")
     latest = exploratory_results(results_dir, 2, {"underperformance": ["Caribbean, and 2026 is immature."]})
-    # The Anthropic API is the boundary: stand a fake judge in for Claude.
+    # The Anthropic API is the boundary: stand a fake judge in for Claude, on a direct Anthropic route.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-dummy-for-tests")
     monkeypatch.setattr(exploratory, "claude_judge",
-                        lambda: FakeJudge({"destination": "Caribbean", "immature": "immature"}))
+                        lambda route: FakeJudge({"destination": "Caribbean", "immature": "immature"}))
 
     code = cli_main(["judge", "--chapter", "2", "--results", str(results_dir), "--questions", str(tests_dir)])
 

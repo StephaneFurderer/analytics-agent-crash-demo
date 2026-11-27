@@ -6,7 +6,7 @@ out of transcripts and logs.
 
 ```sh
 uv run demo secret check [NAME...]                  # the LLM route, plus the source of each NAME (exit 1 if any is missing)
-uv run demo secret run -- CMD ARGS                  # CMD runs with COMPASS_LLM_PROVIDER / _MODEL / _API_KEY set
+uv run demo secret run -- CMD ARGS                  # CMD runs with COMPASS_LLM_API_KEY / COMPASS_LLM_BASE_URL set
 uv run demo secret run --name NAME -- CMD ARGS      # also inject NAME (repeatable)
 ```
 
@@ -15,7 +15,7 @@ through the user's `infisical login` session). The first source wins. Infisical 
 session, it is skipped and nothing prompts.
 
 For the LLM, an Anthropic key (`ANTHROPIC_API_KEY` / `ANTHROPIC_API_TOKEN`) reaches Claude directly and an
-OpenRouter key (`OPENROUTER_API_KEY` / `OPENROUTER_API_TOKEN`) goes through OpenRouter. Within a source, OpenRouter
+OpenRouter key (`OPENROUTER_API_KEY` / `OPENROUTER_API_TOKEN`) goes through OpenRouter's Anthropic-compatible endpoint. Within a source, OpenRouter
 comes first. `COMPASS_LLM_PROVIDER` forces one.
 
 Rules:

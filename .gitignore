@@ -11,6 +11,8 @@ nao/databases/
 nao/.meta/
 # nao chat / nao test scratch
 nao/tests/outputs/
+# nao chat's app database (users, chats): `demo chat` keeps it here, outside the nao project.
+.nao-app/
 .env
 # Archived benchmark runs and the Accuracy matrix (`demo benchmark`, `demo report`).
 benchmark-results/

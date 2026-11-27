@@ -21,6 +21,16 @@ WAREHOUSE = REPO_ROOT / "warehouse" / "compass.duckdb"
 API_KEY_ENV = "ANTHROPIC_API_KEY"  # one of the variables keys.llm_route() reads
 # nao's PostHog telemetry is on by default; the demo needs no hosted service but the LLM provider.
 NAO_ENV = {"POSTHOG_DISABLED": "true"}
+# nao chat's own app database (users, chats). nao's default lives inside the virtualenv and makes only the
+# first user ever signed up a member of the project; the demo keeps it in the repo (gitignored) instead,
+# outside nao/ so the agent can't read it. Delete the folder to start over.
+CHAT_DB = REPO_ROOT / ".nao-app" / "chat.sqlite"
+
+
+def app_db_env(path: Path) -> dict[str, str]:
+    """The variable pointing nao chat's server at its app database `path` (created on first start)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return {"DB_URI": f"sqlite:{path.resolve()}"}
 
 
 def nao(*args: str, project: Path = PROJECT_DIR, check: bool = True, env: dict[str, str] | None = None) -> int:
@@ -71,4 +81,4 @@ def chat(project: Path = PROJECT_DIR) -> int:
         raise NotReady(f"No warehouse at {path}. Run `uv run demo reset` first.")
     sync(project)
     print(f"Analytics agent: {route.describe()}", flush=True)
-    return nao("chat", project=project, check=False, env=route.nao_env())
+    return nao("chat", project=project, check=False, env={**route.nao_env(), **app_db_env(CHAT_DB)})

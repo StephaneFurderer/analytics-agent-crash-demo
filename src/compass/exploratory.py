@@ -84,7 +84,7 @@ def scores_path(results_file: Path) -> Path:
 
 
 def judge_run(results_file: Path, questions: dict[str, Question], judge: Judge,
-              model: str = keys.ANTHROPIC_MODEL) -> Path:
+              model: str = keys.MODEL) -> Path:
     """Judge every Exploratory answer in a nao results file; save prompts and scores next to it."""
     data = json.loads(results_file.read_text())
     scores = []
@@ -123,9 +123,9 @@ def judge_chapter(chapter: int, results_dir: Path, tests_dir: Path, judge: Judge
                              f"Run `uv run demo benchmark --set exploratory --chapter {chapter}` first.")
     if judge is None:
         route = agent.llm_route()
-        judge, model = claude_judge(route), f"{route.provider}:{route.model}"
+        judge, model = claude_judge(route), f"{route.model} via {route.provider}"
     else:
-        model = keys.ANTHROPIC_MODEL
+        model = keys.MODEL
     return judge_run(run, benchmark.questions(tests_dir), judge, model=model)
 
 

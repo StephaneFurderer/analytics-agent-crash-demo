@@ -53,8 +53,8 @@ DUMMY_KEY = "sk-ant-dummy-for-tests"
 
 
 @pytest.mark.parametrize("route", [
-    keys.Route("anthropic", "claude-opus-5-5", DUMMY_KEY, "shell"),
-    keys.Route("openrouter", "anthropic/claude-opus-5.5", "sk-or-dummy-for-tests", "Infisical"),
+    keys.Route("anthropic", DUMMY_KEY, "shell"),
+    keys.Route("openrouter", "sk-or-dummy-for-tests", "Infisical"),
 ], ids=["anthropic", "openrouter"])
 def test_the_project_config_loads_with_the_route_the_key_opens(route):
     config = NaoConfig.load(agent.PROJECT_DIR, extra_env=route.nao_env(), process_env=False)
@@ -63,12 +63,14 @@ def test_the_project_config_loads_with_the_route_the_key_opens(route):
     assert database.type == "duckdb"
     assert (agent.PROJECT_DIR / database.path).resolve() == agent.WAREHOUSE.resolve()
     [provider] = config.llm.providers
-    assert provider.provider == route.provider
+    # Literal provider and model: nao's server reads them raw. Only the key and base URL follow the route.
+    assert provider.provider == "anthropic"
     assert provider.api_key == route.api_key
-    assert [m.id for m in provider.models] == [route.model]
+    assert provider.base_url == route.nao_env()["COMPASS_LLM_BASE_URL"]
+    assert [m.id for m in provider.models] == ["claude-opus-5-5"]
     # The benchmark asks each question 3 times, with the agent's model.
     assert config.test.k == 3
-    assert config.test.models == [f"{route.provider}:{route.model}"]
+    assert config.test.models == ["anthropic:claude-opus-5-5"]
 
 
 def test_the_committed_context_is_the_config_alone():
@@ -106,3 +108,12 @@ def test_chat_asks_for_a_reset_when_there_is_no_warehouse(tmp_path, monkeypatch)
 
     with pytest.raises(agent.NotReady, match="demo reset"):
         agent.chat(project)
+
+
+def test_nao_chat_keeps_its_app_database_outside_the_agents_project(tmp_path):
+    # nao's default app database sits in the virtualenv and admits only its first user ever to the project.
+    env = agent.app_db_env(tmp_path / "app" / "chat.sqlite")
+
+    assert env == {"DB_URI": f"sqlite:{(tmp_path / 'app' / 'chat.sqlite').resolve()}"}
+    assert (tmp_path / "app").is_dir()
+    assert not agent.CHAT_DB.resolve().is_relative_to(agent.PROJECT_DIR.resolve())

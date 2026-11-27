@@ -29,6 +29,7 @@ import secrets
 import shutil
 import signal
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -221,7 +222,9 @@ def _chat_server(project: Path, log_path: Path, route: keys.Route) -> Iterator[s
     """A `nao chat` server for the project, stopped on exit. Yields its URL."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     url = f"http://localhost:{SERVER_PORT}"
-    env = {**os.environ, **agent.NAO_ENV, **route.nao_env(),
+    # A fresh app database per run: its first user (see _local_user) becomes the project's admin.
+    app_db = Path(tempfile.mkdtemp(prefix="compass-benchmark-")) / "app.sqlite"
+    env = {**os.environ, **agent.NAO_ENV, **route.nao_env(), **agent.app_db_env(app_db),
            "BROWSER": "true",            # `nao chat` opens a browser; `true` is a no-op command
            "ENABLE_USER_SIGNUP": "true"}  # lets each run sign up its own local user (see _local_user)
     with log_path.open("w") as log:
@@ -234,6 +237,7 @@ def _chat_server(project: Path, log_path: Path, route: keys.Route) -> Iterator[s
             yield url
         finally:
             _stop(server)
+            shutil.rmtree(app_db.parent, ignore_errors=True)
 
 
 def _wait_until_up(url: str, server: subprocess.Popen, log_path: Path) -> None:

@@ -39,8 +39,8 @@ OpenRouter; nothing else is hosted (Infisical is optional). Any one of these wor
 3. **Infisical** (optional): after `infisical login`, `OPENROUTER_API_TOKEN` or `ANTHROPIC_API_TOKEN` from the
    `infra` project, `prod` environment. Override with `INFISICAL_ENV` or `INFISICAL_PROJECT_ID`.
 
-An Anthropic key goes straight to Anthropic (`claude-opus-5-5`); an OpenRouter key goes through OpenRouter
-(`anthropic/claude-opus-5.5`). Within a source OpenRouter is tried first. There is no automatic fallback: if
+Either way the model is `claude-opus-5-5`: an Anthropic key goes straight to Anthropic, an OpenRouter key goes
+through OpenRouter's Anthropic-compatible endpoint (served as `anthropic/claude-opus-5.5`). Within a source OpenRouter is tried first. There is no automatic fallback: if
 OpenRouter fails, set `COMPASS_LLM_PROVIDER=anthropic` (or `openrouter`) to force a provider.
 
 ```sh

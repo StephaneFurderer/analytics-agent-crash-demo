@@ -55,7 +55,7 @@ def test_the_infisical_tokens_route_through_openrouter_first(tmp_path):
 
     route = keys.llm_route(dotenv=tmp_path / ".env", infisical=infisical)
 
-    assert (route.provider, route.model, route.api_key) == ("openrouter", "anthropic/claude-opus-5.5", "sk-or-vault")
+    assert (route.provider, route.model, route.api_key) == ("openrouter", "claude-opus-5-5", "sk-or-vault")
     assert route.source == "Infisical"
 
 
@@ -88,12 +88,12 @@ def test_no_key_anywhere_says_every_way_to_provide_one(tmp_path):
         assert hint in message
 
 
-def test_a_route_hands_nao_its_provider_model_and_key():
-    route = keys.Route("openrouter", "anthropic/claude-opus-5.5", "sk-or-x", "Infisical")
+def test_a_route_hands_nao_its_key_and_base_url():
+    route = keys.Route("openrouter", "sk-or-x", "Infisical")
 
-    assert route.nao_env() == {"COMPASS_LLM_PROVIDER": "openrouter",
-                               "COMPASS_LLM_MODEL": "anthropic/claude-opus-5.5",
-                               "COMPASS_LLM_API_KEY": "sk-or-x"}
+    # nao's Anthropic SDK wants the versioned base URL: OpenRouter's Anthropic endpoint is /api/v1/messages.
+    assert route.nao_env() == {"COMPASS_LLM_API_KEY": "sk-or-x", "COMPASS_LLM_BASE_URL": "https://openrouter.ai/api/v1"}
+    assert keys.Route("anthropic", "sk-ant-x", "shell").nao_env()["COMPASS_LLM_BASE_URL"] == "https://api.anthropic.com"
     assert "sk-or-x" not in route.describe()
 
 
@@ -160,7 +160,7 @@ def test_secret_check_names_the_llm_route_and_sources_without_values(monkeypatch
     assert cli.main(["secret", "check", "ANTHROPIC_API_KEY", "NOT_THERE"]) == 1
 
     out = capsys.readouterr().out
-    assert "anthropic (claude-opus-5-5), key from shell" in out
+    assert "claude-opus-5-5 via anthropic, key from shell" in out
     assert "ANTHROPIC_API_KEY: shell" in out
     assert "NOT_THERE: missing" in out
     assert "sk-ant-secret-value" not in out
@@ -177,7 +177,7 @@ def test_secret_run_injects_the_llm_route_into_the_command(tmp_path, monkeypatch
     (tmp_path / ".env").write_text("OPENROUTER_API_KEY=sk-or-from-dotenv\n")
 
     assert cli.main(["secret", "run", "--", *child("COMPASS_LLM_API_KEY", "sk-or-from-dotenv")]) == 0
-    assert cli.main(["secret", "run", "--", *child("COMPASS_LLM_PROVIDER", "openrouter")]) == 0
+    assert cli.main(["secret", "run", "--", *child("COMPASS_LLM_BASE_URL", "https://openrouter.ai/api/v1")]) == 0
     assert "sk-or-from-dotenv" not in capsys.readouterr().out
 
 

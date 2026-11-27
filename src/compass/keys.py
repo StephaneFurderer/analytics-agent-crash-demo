@@ -9,7 +9,7 @@ The first source holding the name wins, so a follower's own key always beats the
 prints a secret's value: `describe()` and `demo secret check` show where a secret came from, never what it is.
 
 The LLM route: an OpenRouter key (OPENROUTER_API_KEY / OPENROUTER_API_TOKEN) reaches Claude Opus 5.5 through
-OpenRouter; an Anthropic key (ANTHROPIC_API_KEY / ANTHROPIC_API_TOKEN) reaches it directly. OpenRouter is tried
+OpenRouter's Anthropic-compatible endpoint; an Anthropic key (ANTHROPIC_API_KEY / ANTHROPIC_API_TOKEN) reaches it directly. OpenRouter is tried
 first within each source. There is no automatic retry: if OpenRouter fails, set COMPASS_LLM_PROVIDER=anthropic
 (or openrouter) to force a provider.
 """
@@ -63,46 +63,47 @@ class Found:
 
 @dataclass(frozen=True)
 class Provider:
+    """Who serves Claude for a key. Both speak the Anthropic Messages API, so nao's `anthropic` provider and the
+    Anthropic SDK reach either one; only the base URL differs (nao's SDK wants it with `/v1`, the Python SDK without)."""
+
     name: str
     key_names: tuple[str, ...]
-    model: str
-    anthropic_base_url: str | None  # where the Anthropic SDK reaches Claude with this key (None: Anthropic)
+    nao_base_url: str
+    sdk_base_url: str
 
 
-ANTHROPIC_MODEL = "claude-opus-5-5"
+MODEL = "claude-opus-5-5"
+"""Claude Opus 5.5. OpenRouter's Anthropic endpoint takes the same id (it serves anthropic/claude-opus-5.5)."""
 
 PROVIDERS = {
     "openrouter": Provider("openrouter", ("OPENROUTER_API_KEY", "OPENROUTER_API_TOKEN"),
-                           "anthropic/claude-opus-5.5", "https://openrouter.ai/api"),
-    "anthropic": Provider("anthropic", ("ANTHROPIC_API_KEY", "ANTHROPIC_API_TOKEN"), ANTHROPIC_MODEL, None),
+                           "https://openrouter.ai/api/v1", "https://openrouter.ai/api"),
+    "anthropic": Provider("anthropic", ("ANTHROPIC_API_KEY", "ANTHROPIC_API_TOKEN"),
+                          "https://api.anthropic.com", "https://api.anthropic.com"),
 }
 
 
 @dataclass(frozen=True)
 class Route:
-    """How the Analytics agent and the judge reach Claude: provider, its model id, the key, and its source."""
+    """How the Analytics agent and the judge reach Claude: who serves it, with which key, found where."""
 
     provider: str
-    model: str
     api_key: str
     source: str
+    model: str = MODEL
 
     def nao_env(self) -> dict[str, str]:
-        """The variables `nao/nao_config.yaml` reads its provider, model and key from."""
-        return {PROVIDER_ENV: self.provider, "COMPASS_LLM_MODEL": self.model,
-                "COMPASS_LLM_API_KEY": self.api_key}
+        """The variables `nao/nao_config.yaml` reads its key and base URL from."""
+        return {"COMPASS_LLM_API_KEY": self.api_key, "COMPASS_LLM_BASE_URL": PROVIDERS[self.provider].nao_base_url}
 
     def describe(self) -> str:
-        return f"{self.provider} ({self.model}), key from {self.source}"
+        return f"{self.model} via {self.provider}, key from {self.source}"
 
     def anthropic_client(self):
-        """An Anthropic SDK client for this route (OpenRouter speaks the Anthropic Messages API)."""
+        """An Anthropic SDK client for this route."""
         import anthropic
 
-        base_url = PROVIDERS[self.provider].anthropic_base_url
-        if base_url is None:
-            return anthropic.Anthropic(api_key=self.api_key)
-        return anthropic.Anthropic(base_url=base_url, auth_token=self.api_key, api_key=None)
+        return anthropic.Anthropic(api_key=self.api_key, base_url=PROVIDERS[self.provider].sdk_base_url)
 
 
 _UNSET = object()
@@ -128,7 +129,7 @@ def llm_route(*, dotenv: Path | None = None, infisical: SecretStore | None | obj
             for name in provider.key_names:
                 value = get(name)
                 if value:
-                    return Route(provider.name, provider.model, value, source)
+                    return Route(provider.name, value, source)
     raise NoKey(
         "No LLM key found. Provide one of:\n"
         "  - ANTHROPIC_API_KEY=sk-ant-... (direct to Anthropic) or OPENROUTER_API_KEY=sk-or-... (through OpenRouter),\n"
@@ -259,7 +260,7 @@ def _cli_session_token() -> str | None:
     if shutil.which("infisical") is None or not INFISICAL_CONFIG.is_file():
         return None
     try:
-        out = subprocess.run(["infisical", "user", "get", "token", "--plain"], capture_output=True, text=True,
+        out = subprocess.run(["infisical", "user", "get", "token", "--plain", "--silent"], capture_output=True, text=True,
                              stdin=subprocess.DEVNULL, timeout=20)
     except (subprocess.TimeoutExpired, OSError):
         return None
@@ -268,10 +269,12 @@ def _cli_session_token() -> str | None:
 
 
 def _cli_api_url() -> str:
-    """The API of the Infisical instance you logged in to (`LoggedInUserDomain`), else Infisical Cloud."""
+    """The API of the Infisical instance your active login profile uses, else Infisical Cloud (US)."""
     try:
-        domain = json.loads(INFISICAL_CONFIG.read_text()).get("LoggedInUserDomain")
+        config = json.loads(INFISICAL_CONFIG.read_text())
     except (OSError, ValueError):
-        domain = None
+        config = {}
+    profiles = {p.get("name"): p for p in config.get("profiles", []) if isinstance(p, dict)}
+    domain = profiles.get(config.get("activeProfile"), {}).get("domain") or config.get("LoggedInUserDomain")
     url = (domain or INFISICAL_API_URL).rstrip("/")
     return url if url.endswith("/api") else f"{url}/api"

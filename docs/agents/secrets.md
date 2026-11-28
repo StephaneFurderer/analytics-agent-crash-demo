@@ -24,4 +24,7 @@ Rules:
 - Never echo, log or commit a secret, and never write one into `nao_config.yaml`.
 - If no session is found, ask the user to run `! infisical login`. Do not start the login yourself.
 
-The code is in `src/compass/keys.py`.
+The code is in `src/compass/keys.py`, on top of the shared lookup in `src/compass/vendor/secret.py`, a copy of
+the Home Repo's `tools/secret/secret.py` (ADR 0006). The vault itself, its folders and the other ways apps reach
+it are described in the Home Repo's `docs/secrets.md`. That repo is private, so followers can ignore it: a key in
+the shell or `.env` is all the demo needs.

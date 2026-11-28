@@ -7,6 +7,7 @@ A secret is looked up in order:
 
 The first source holding the name wins, so a follower's own key always beats the shared vault. Nothing here
 prints a secret's value: `describe()` and `demo secret check` show where a secret came from, never what it is.
+The lookup itself is the shared one in `compass.vendor.secret` (see ADR 0006); this module adds the LLM route.
 
 The LLM route: an OpenRouter key (OPENROUTER_API_KEY / OPENROUTER_API_TOKEN) reaches Claude Opus 5.5 through
 OpenRouter's Anthropic-compatible endpoint; an Anthropic key (ANTHROPIC_API_KEY / ANTHROPIC_API_TOKEN) reaches it directly. OpenRouter is tried
@@ -16,25 +17,23 @@ first within each source. There is no automatic retry: if OpenRouter fails, set 
 
 from __future__ import annotations
 
-import json
 import os
-import re
-import shutil
-import subprocess
-import urllib.error
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Protocol
+
+from compass.vendor import secret
+from compass.vendor.secret import Found, InfisicalError, InfisicalNotFound
+
+__all__ = ["DOTENV", "MODEL", "PROVIDERS", "Found", "Infisical", "InfisicalError", "InfisicalNotFound", "NoKey",
+           "Provider", "Route", "llm_route", "lookup"]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOTENV = REPO_ROOT / ".env"
 
 INFISICAL_PROJECT = "infra"
-INFISICAL_ENVIRONMENT = "prod"
-INFISICAL_API_URL = "https://app.infisical.com/api"
-INFISICAL_CONFIG = Path.home() / ".infisical" / "infisical-config.json"
+INFISICAL_ENVIRONMENT = secret.DEFAULT_ENVIRONMENT
+INFISICAL_FOLDER = "/"
 
 PROVIDER_ENV = "COMPASS_LLM_PROVIDER"
 
@@ -43,22 +42,31 @@ class NoKey(Exception):
     """No LLM key in any source; the message lists every way to provide one."""
 
 
-class InfisicalError(Exception):
-    """Infisical could not be reached, refused the session, or has no such project."""
-
-
-class InfisicalNotFound(InfisicalError):
-    """The project has no secret by that name."""
-
-
 class SecretStore(Protocol):
     def get(self, name: str) -> str | None: ...
 
 
-@dataclass(frozen=True)
-class Found:
-    value: str
-    source: str  # "shell", ".env" or "Infisical"
+class Infisical(secret.Infisical):
+    """The demo's vault: always the `infra` project's root folder, whatever INFISICAL_PROJECT or
+    INFISICAL_SECRET_PATH say for other tools. INFISICAL_ENV and INFISICAL_PROJECT_ID still apply."""
+
+    def __init__(self, token: str, api_url: str = secret.INFISICAL_API_URL, project: str | None = None,
+                 environment: str | None = None, path: str | None = None, get_json: secret.GetJson = secret._get_json):
+        super().__init__(token, api_url, project=project or INFISICAL_PROJECT, environment=environment,
+                         path=path or INFISICAL_FOLDER, get_json=get_json)
+
+
+class _SessionVault:
+    """Your login session's vault (`Infisical.from_session()`), opened only if a lookup gets that far."""
+
+    def __init__(self):
+        self._opened = False
+        self._store: SecretStore | None = None
+
+    def get(self, name: str) -> str | None:
+        if not self._opened:
+            self._store, self._opened = Infisical.from_session(), True
+        return self._store.get(name) if self._store else None
 
 
 @dataclass(frozen=True)
@@ -106,10 +114,8 @@ class Route:
         return anthropic.Anthropic(api_key=self.api_key, base_url=PROVIDERS[self.provider].sdk_base_url)
 
 
-_UNSET = object()
-
-
-def lookup(name: str, *, dotenv: Path | None = None, infisical: SecretStore | None | object = _UNSET) -> Found | None:
+def lookup(name: str, *, dotenv: Path | None = None, infisical: SecretStore | None | object = secret.SESSION
+           ) -> Found | None:
     """The secret `name` from the first source holding it, or None. Infisical defaults to your login session."""
     for source, get in _sources(dotenv, infisical):
         value = get(name)
@@ -118,7 +124,7 @@ def lookup(name: str, *, dotenv: Path | None = None, infisical: SecretStore | No
     return None
 
 
-def llm_route(*, dotenv: Path | None = None, infisical: SecretStore | None | object = _UNSET) -> Route:
+def llm_route(*, dotenv: Path | None = None, infisical: SecretStore | None | object = secret.SESSION) -> Route:
     """The LLM route the first key found opens. Raises NoKey when there is none."""
     forced = os.environ.get(PROVIDER_ENV)
     if forced and forced not in PROVIDERS:
@@ -141,140 +147,6 @@ def llm_route(*, dotenv: Path | None = None, infisical: SecretStore | None | obj
 
 
 def _sources(dotenv: Path | None, infisical) -> list[tuple[str, Callable[[str], str | None]]]:
-    values = read_dotenv(DOTENV if dotenv is None else dotenv)
-    sources = [("shell", os.environ.get), (".env", values.get)]
-    if infisical is _UNSET:
-        sources.append(("Infisical", _session_vault()))
-    elif infisical is not None:
-        sources.append(("Infisical", _quiet(infisical)))
-    return sources
-
-
-def _session_vault() -> Callable[[str], str | None]:
-    """Your login session's vault, opened only if a lookup gets this far (the shell and .env had nothing)."""
-    store: list[SecretStore | None] = []
-
-    def get(name: str) -> str | None:
-        if not store:
-            store.append(Infisical.from_session())
-        return _quiet(store[0])(name) if store[0] else None
-    return get
-
-
-def _quiet(store: SecretStore) -> Callable[[str], str | None]:
-    """An unreachable, refusing or confusing vault counts as empty: the other sources still work."""
-    def get(name: str) -> str | None:
-        try:
-            return store.get(name)
-        except InfisicalError:
-            return None
-    return get
-
-
-def read_dotenv(path: Path) -> dict[str, str]:
-    """KEY=VALUE lines of a .env file (comments, blank lines and `export ` allowed). Missing file: empty."""
-    if not path.is_file():
-        return {}
-    values = {}
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = line.removeprefix("export ").split("=", 1)
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
-            value = value[1:-1]
-        values[name.strip()] = value
-    return values
-
-
-GetJson = Callable[[str, str], dict]
-"""GET a URL with a bearer token; return the JSON body. Raises InfisicalNotFound on 404, InfisicalError otherwise."""
-
-
-def _get_json(url: str, token: str) -> dict:
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        kind = InfisicalNotFound if error.code == 404 else InfisicalError
-        raise kind(f"Infisical answered {error.code} for {url.split('?')[0]}") from None
-    except (urllib.error.URLError, TimeoutError) as error:
-        raise InfisicalError(f"Infisical unreachable: {error}") from None
-
-
-class Infisical:
-    """Secrets of one Infisical project and environment, read through the REST API.
-
-    `project` is matched against the names and slugs of the projects the token can see; set
-    INFISICAL_PROJECT_ID to skip that lookup. INFISICAL_ENV overrides the environment slug.
-    """
-
-    def __init__(self, token: str, api_url: str = INFISICAL_API_URL, project: str = INFISICAL_PROJECT,
-                 environment: str | None = None, get_json: GetJson = _get_json):
-        self.token = token
-        self.api_url = api_url.rstrip("/")
-        self.project = project
-        self.environment = environment or os.environ.get("INFISICAL_ENV", INFISICAL_ENVIRONMENT)
-        self._get_json = get_json
-        self._project_id = os.environ.get("INFISICAL_PROJECT_ID")
-
-    def get(self, name: str) -> str | None:
-        query = urllib.parse.urlencode(
-            {"projectId": self.project_id(), "environment": self.environment, "secretPath": "/"})
-        try:
-            body = self._get_json(f"{self.api_url}/v4/secrets/{urllib.parse.quote(name)}?{query}", self.token)
-        except InfisicalNotFound:
-            return None
-        try:
-            return body["secret"]["secretValue"] or None
-        except (KeyError, TypeError):
-            raise InfisicalError(f"Unexpected Infisical reply for {name}") from None
-
-    def project_id(self) -> str:
-        if self._project_id is None:
-            projects = self._get_json(f"{self.api_url}/v1/workspace", self.token).get("workspaces", [])
-            matches = [p["id"] for p in projects if self.project in (p.get("name"), p.get("slug"))]
-            if not matches:
-                raise InfisicalError(f"No Infisical project named `{self.project}` is visible to this session.")
-            self._project_id = matches[0]
-        return self._project_id
-
-    @classmethod
-    def from_session(cls) -> Infisical | None:
-        """The vault behind INFISICAL_TOKEN or your `infisical login` session; None when neither exists.
-
-        Never starts a login: without a stored session this returns None and the other sources are used.
-        """
-        token = os.environ.get("INFISICAL_TOKEN") or _cli_session_token()
-        if not token:
-            return None
-        return cls(token, api_url=os.environ.get("INFISICAL_API_URL") or _cli_api_url())
-
-
-_JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
-
-
-def _cli_session_token() -> str | None:
-    if shutil.which("infisical") is None or not INFISICAL_CONFIG.is_file():
-        return None
-    try:
-        out = subprocess.run(["infisical", "user", "get", "token", "--plain", "--silent"], capture_output=True, text=True,
-                             stdin=subprocess.DEVNULL, timeout=20)
-    except (subprocess.TimeoutExpired, OSError):
-        return None
-    match = _JWT.search(out.stdout)
-    return match.group(0) if out.returncode == 0 and match else None
-
-
-def _cli_api_url() -> str:
-    """The API of the Infisical instance your active login profile uses, else Infisical Cloud (US)."""
-    try:
-        config = json.loads(INFISICAL_CONFIG.read_text())
-    except (OSError, ValueError):
-        config = {}
-    profiles = {p.get("name"): p for p in config.get("profiles", []) if isinstance(p, dict)}
-    domain = profiles.get(config.get("activeProfile"), {}).get("domain") or config.get("LoggedInUserDomain")
-    url = (domain or INFISICAL_API_URL).rstrip("/")
-    return url if url.endswith("/api") else f"{url}/api"
+    """The shared lookup's sources, with the repo-root .env and the demo's own vault as defaults."""
+    store = _SessionVault() if infisical is secret.SESSION else infisical
+    return secret.sources(DOTENV if dotenv is None else dotenv, store)

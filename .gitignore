@@ -17,3 +17,6 @@ nao/tests/outputs/
 # Archived benchmark runs and the Accuracy matrix (`demo benchmark`, `demo report`).
 benchmark-results/
 nao/tests/_run/
+# Streamlit links its own agent skill into the project (symlinks into .venv); it recreates them itself.
+.agents/skills/developing-with-streamlit
+.claude/skills/developing-with-streamlit

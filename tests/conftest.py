@@ -18,7 +18,8 @@ from compass import cli, keys, metrics, warehouse
 def no_real_secrets(monkeypatch, tmp_path_factory):
     """Tests never see the developer's keys: no shell LLM variables, no repo .env, no Infisical session."""
     for name in [*(n for p in keys.PROVIDERS.values() for n in p.key_names), keys.PROVIDER_ENV,
-                 "INFISICAL_TOKEN", "INFISICAL_ENV", "INFISICAL_PROJECT_ID", "INFISICAL_API_URL"]:
+                 "INFISICAL_TOKEN", "INFISICAL_ENV", "INFISICAL_PROJECT_ID", "INFISICAL_API_URL",
+                 "INFISICAL_PROJECT", "INFISICAL_SECRET_PATH"]:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(keys, "DOTENV", tmp_path_factory.mktemp("no-dotenv") / ".env")
     monkeypatch.setattr(keys.Infisical, "from_session", classmethod(lambda cls: None))

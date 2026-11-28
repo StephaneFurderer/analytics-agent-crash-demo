@@ -23,16 +23,17 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from compass.vendor import secret
-from compass.vendor.secret import Found, Infisical, InfisicalError, InfisicalNotFound, read_dotenv
+from compass.vendor.secret import Found, InfisicalError, InfisicalNotFound
 
 __all__ = ["DOTENV", "MODEL", "PROVIDERS", "Found", "Infisical", "InfisicalError", "InfisicalNotFound", "NoKey",
-           "Provider", "Route", "llm_route", "lookup", "read_dotenv"]
+           "Provider", "Route", "llm_route", "lookup"]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOTENV = REPO_ROOT / ".env"
 
-INFISICAL_PROJECT = secret.DEFAULT_PROJECT
+INFISICAL_PROJECT = "infra"
 INFISICAL_ENVIRONMENT = secret.DEFAULT_ENVIRONMENT
+INFISICAL_FOLDER = "/"
 
 PROVIDER_ENV = "COMPASS_LLM_PROVIDER"
 
@@ -43,6 +44,29 @@ class NoKey(Exception):
 
 class SecretStore(Protocol):
     def get(self, name: str) -> str | None: ...
+
+
+class Infisical(secret.Infisical):
+    """The demo's vault: always the `infra` project's root folder, whatever INFISICAL_PROJECT or
+    INFISICAL_SECRET_PATH say for other tools. INFISICAL_ENV and INFISICAL_PROJECT_ID still apply."""
+
+    def __init__(self, token: str, api_url: str = secret.INFISICAL_API_URL, project: str | None = None,
+                 environment: str | None = None, path: str | None = None, get_json: secret.GetJson = secret._get_json):
+        super().__init__(token, api_url, project=project or INFISICAL_PROJECT, environment=environment,
+                         path=path or INFISICAL_FOLDER, get_json=get_json)
+
+
+class _SessionVault:
+    """Your login session's vault (`Infisical.from_session()`), opened only if a lookup gets that far."""
+
+    def __init__(self):
+        self._opened = False
+        self._store: SecretStore | None = None
+
+    def get(self, name: str) -> str | None:
+        if not self._opened:
+            self._store, self._opened = Infisical.from_session(), True
+        return self._store.get(name) if self._store else None
 
 
 @dataclass(frozen=True)
@@ -93,7 +117,11 @@ class Route:
 def lookup(name: str, *, dotenv: Path | None = None, infisical: SecretStore | None | object = secret.SESSION
            ) -> Found | None:
     """The secret `name` from the first source holding it, or None. Infisical defaults to your login session."""
-    return secret.lookup(name, dotenv=DOTENV if dotenv is None else dotenv, infisical=infisical)
+    for source, get in _sources(dotenv, infisical):
+        value = get(name)
+        if value:
+            return Found(value, source)
+    return None
 
 
 def llm_route(*, dotenv: Path | None = None, infisical: SecretStore | None | object = secret.SESSION) -> Route:
@@ -119,4 +147,6 @@ def llm_route(*, dotenv: Path | None = None, infisical: SecretStore | None | obj
 
 
 def _sources(dotenv: Path | None, infisical) -> list[tuple[str, Callable[[str], str | None]]]:
-    return secret.sources(DOTENV if dotenv is None else dotenv, infisical)
+    """The shared lookup's sources, with the repo-root .env and the demo's own vault as defaults."""
+    store = _SessionVault() if infisical is secret.SESSION else infisical
+    return secret.sources(DOTENV if dotenv is None else dotenv, store)
